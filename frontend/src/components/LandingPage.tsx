@@ -63,10 +63,30 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     }
   }, [scrollProgress, setVisorState]);
 
-  // Determine section fades based on scrollProgress
-  const opacityHero = Math.max(0, 1 - (scrollProgress * 3.5));
-  const opacityFeatures = Math.min(1, Math.max(0, (scrollProgress - 0.25) * 4));
-  const opacityTestimonials = Math.min(1, Math.max(0, (scrollProgress - 0.6) * 4));
+  // Calculate section opacities with proper fade-in and fade-out so they never overlap
+  let opacityHero = 0;
+  let opacityFeatures = 0;
+  let opacityTestimonials = 0;
+
+  if (scrollProgress < 0.2) {
+    opacityHero = 1;
+  } else if (scrollProgress >= 0.2 && scrollProgress < 0.35) {
+    opacityHero = 1 - (scrollProgress - 0.2) / 0.15;
+  }
+
+  if (scrollProgress >= 0.25 && scrollProgress < 0.38) {
+    opacityFeatures = (scrollProgress - 0.25) / 0.13;
+  } else if (scrollProgress >= 0.38 && scrollProgress < 0.6) {
+    opacityFeatures = 1;
+  } else if (scrollProgress >= 0.6 && scrollProgress < 0.72) {
+    opacityFeatures = 1 - (scrollProgress - 0.6) / 0.12;
+  }
+
+  if (scrollProgress >= 0.65 && scrollProgress < 0.78) {
+    opacityTestimonials = (scrollProgress - 0.65) / 0.13;
+  } else if (scrollProgress >= 0.78) {
+    opacityTestimonials = 1;
+  }
 
   return (
     <div className="landing-container" style={{ position: 'relative', width: '100%', minHeight: '300vh' }}>
