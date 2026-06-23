@@ -25,8 +25,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ userProfile, onEnterRoom, 
   const [hackathons, setHackathons] = useState<{ id?: string; name: string; prize: string }[]>([]);
 
   // Real data state
-  const [realSuggestions, setRealSuggestions] = useState<any[]>([]);
   const [realProfile, setRealProfile] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<'teach' | 'learn'>('teach');
+  const [nearbyLearners, setNearbyLearners] = useState<any[]>([]);
+  const [nearbyTeachers, setNearbyTeachers] = useState<any[]>([]);
 
   // Form states
   const [newExamName, setNewExamName] = useState('');
@@ -53,8 +55,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ userProfile, onEnterRoom, 
           setProfileScore(profileRes.data.reputation_points || 70);
         }
 
-        const matchesRes = await api.matching.getSuggestions();
-        setRealSuggestions(matchesRes.data || []);
+        try {
+          const learnersRes = await api.matching.getNearbyLearners();
+          setNearbyLearners(learnersRes.data || []);
+        } catch (e) {
+          console.warn('Failed to load nearby learners:', e);
+        }
+
+        try {
+          const teachersRes = await api.matching.getNearbyTeachers();
+          setNearbyTeachers(teachersRes.data || []);
+        } catch (e) {
+          console.warn('Failed to load nearby teachers:', e);
+        }
 
         const badgesRes = await api.badges.getMyBadges();
         setBadges(badgesRes.data || []);
@@ -195,20 +208,33 @@ export const Dashboard: React.FC<DashboardProps> = ({ userProfile, onEnterRoom, 
     }
   };
 
-  const displayPeers = realSuggestions.map((s: any) => ({
-    id: s.userId || s.id,
-    name: s.profile?.full_name || s.username || 'Co-learner Node',
-    college: s.profile?.location || 'Grid Network',
-    branch: s.profile?.city || 'General Engineering',
-    course: s.profile?.state_code || 'B.Tech',
-    teachingSkills: s.skillsOffered && s.skillsOffered.length > 0 ? s.skillsOffered : [userProfile.learningSkills[0] || 'Python'],
-    learningSkills: s.skillsWanted && s.skillsWanted.length > 0 ? s.skillsWanted : [userProfile.teachingSkills[0] || 'React'],
-    rating: s.profile?.avg_rating || 4.7,
-    avatar: s.profile?.avatar_url || '👨‍💻',
-    reputation: s.profile?.reputation_points || 90,
-    badges: s.badges || ['Verified Peer'],
-    matchScore: Math.round(s.matchScore || 85)
-  }));
+  const displayPeers = (activeTab === 'teach' ? nearbyLearners : nearbyTeachers).map((s: any) => {
+    const prof = s.profile || {};
+    const skillListOffered = s.skillsOffered && s.skillsOffered.length > 0
+      ? s.skillsOffered
+      : (prof.user_skills_offered?.map((so: any) => so.skills?.name).filter(Boolean) || [userProfile.learningSkills[0] || 'Python']);
+
+    const skillListWanted = s.skillsWanted && s.skillsWanted.length > 0
+      ? s.skillsWanted
+      : (prof.user_skills_wanted?.map((sw: any) => sw.skills?.name).filter(Boolean) || [userProfile.teachingSkills[0] || 'React']);
+
+    return {
+      id: s.userId || s.id,
+      name: prof.full_name || s.username || 'Co-learner Node',
+      college: prof.location || 'Grid Network',
+      branch: prof.city || 'General Engineering',
+      course: prof.state_code || 'B.Tech',
+      teachingSkills: skillListOffered,
+      learningSkills: skillListWanted,
+      rating: prof.avg_rating || 4.7,
+      avatar: prof.avatar_url || '👨‍💻',
+      reputation: prof.reputation_points || 90,
+      badges: s.badges || (s.isLive ? ['LIVE NOW', 'Verified Peer'] : ['Verified Peer']),
+      matchScore: Math.round(s.matchScore || (s.isLive ? 95 : 85)),
+      distance: s.distance,
+      isLive: s.isLive
+    };
+  });
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 2fr', gap: '30px', padding: '40px', flex: 1, zIndex: 10, maxWidth: '1400px', width: '100%', margin: '0 auto' }}>
@@ -397,13 +423,45 @@ export const Dashboard: React.FC<DashboardProps> = ({ userProfile, onEnterRoom, 
 
         {/* Dynamic Matches List */}
         <div className="glass-panel" style={{ padding: '28px', flex: 1 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '12px' }}>
-            <h3 className="font-mono" style={{ color: '#fff', fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Users size={20} color="var(--color-cyan)" /> NETWORK PEER MATCHES
-            </h3>
-            <span className="font-mono" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              FORMULA: OVERLAP(60%) + RATING(40%)
-            </span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 className="font-mono" style={{ color: '#fff', fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                <Users size={20} color="var(--color-cyan)" /> GRID CONNECTIVITY
+              </h3>
+              <span className="font-mono" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                FORMULA: OVERLAP(60%) + PROXIMITY(40%)
+              </span>
+            </div>
+
+            {/* Tabs Selector */}
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
+                onClick={() => setActiveTab('teach')}
+                className={`cyber-button font-mono ${activeTab === 'teach' ? 'active' : ''}`}
+                style={{ 
+                  flex: 1, 
+                  justifyContent: 'center',
+                  background: activeTab === 'teach' ? 'rgba(0, 240, 255, 0.1)' : 'transparent',
+                  borderColor: activeTab === 'teach' ? 'var(--color-cyan)' : 'rgba(255,255,255,0.1)',
+                  color: activeTab === 'teach' ? 'var(--color-cyan)' : 'var(--text-muted)'
+                }}
+              >
+                TEACH GRID (Students Nearby)
+              </button>
+              <button 
+                onClick={() => setActiveTab('learn')}
+                className={`cyber-button purple font-mono ${activeTab === 'learn' ? 'active' : ''}`}
+                style={{ 
+                  flex: 1, 
+                  justifyContent: 'center',
+                  background: activeTab === 'learn' ? 'rgba(189, 0, 255, 0.1)' : 'transparent',
+                  borderColor: activeTab === 'learn' ? 'var(--color-purple)' : 'rgba(255,255,255,0.1)',
+                  color: activeTab === 'learn' ? 'var(--color-purple)' : 'var(--text-muted)'
+                }}
+              >
+                LEARN GRID (Teachers Live/Nearby)
+              </button>
+            </div>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -431,11 +489,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ userProfile, onEnterRoom, 
 
                     {/* Profile Details */}
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
-                        <h4 style={{ color: '#fff', fontSize: '1.05rem' }}>{peer.name}</h4>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                        <h4 style={{ color: '#fff', fontSize: '1.05rem', margin: 0 }}>{peer.name}</h4>
                         <span className="badge-neon font-mono" style={{ fontSize: '0.65rem', padding: '2px 6px' }}>
                           {peer.matchScore}% Match
                         </span>
+                        {peer.isLive && (
+                          <span className="badge-neon font-mono pulse-cyan" style={{ fontSize: '0.65rem', padding: '2px 6px', color: '#00f0ff', borderColor: 'var(--color-cyan)', background: 'rgba(0, 240, 255, 0.1)' }}>
+                            ● LIVE NOW
+                          </span>
+                        )}
+                        {peer.distance !== null && (
+                          <span className="font-mono" style={{ fontSize: '0.75rem', color: 'var(--color-purple)', border: '1px solid rgba(189,0,255,0.2)', padding: '2px 6px', borderRadius: '4px' }}>
+                            📍 {peer.distance} km
+                          </span>
+                        )}
                       </div>
                       <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '8px' }}>
                         {peer.course} in {peer.branch} // {peer.college}

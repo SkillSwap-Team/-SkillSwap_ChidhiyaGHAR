@@ -162,6 +162,12 @@ export const api = {
     async getSuggestions() {
       return request('/api/matching/suggestions');
     },
+    async getNearbyLearners() {
+      return request('/api/matching/nearby-learners');
+    },
+    async getNearbyTeachers() {
+      return request('/api/matching/nearby-teachers');
+    },
     async runMatching() {
       return request('/api/matching/run', { method: 'POST' });
     },

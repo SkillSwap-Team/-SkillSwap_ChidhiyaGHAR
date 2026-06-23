@@ -23,11 +23,16 @@ export const RobotCanvas: React.FC<RobotCanvasProps> = ({
   const visorCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const visorTextureRef = useRef<THREE.CanvasTexture | null>(null);
 
-  // Keep track of visorState in a ref to prevent recreating WebGL scene on change
+  // Keep track of visorState, scrollProgress, and activeSection in refs to prevent recreating WebGL scene on change
   const visorStateRef = useRef(visorState);
+  const scrollProgressRef = useRef(scrollProgress);
+  const activeSectionRef = useRef(activeSection);
+
   useEffect(() => {
     visorStateRef.current = visorState;
-  }, [visorState]);
+    scrollProgressRef.current = scrollProgress;
+    activeSectionRef.current = activeSection;
+  }, [visorState, scrollProgress, activeSection]);
 
   // Track mouse coordinates for subtle head tracking
   const mouseRef = useRef({ x: 0, y: 0 });
@@ -332,9 +337,47 @@ export const RobotCanvas: React.FC<RobotCanvasProps> = ({
     const animate = () => {
       time += 1;
 
-      // Subtle float up and down
+      const currentScroll = scrollProgressRef.current;
+      const currentSection = activeSectionRef.current;
+
+      // Update robot base coordinates, scales, and base Y value on every frame
       if (robot) {
-        robot.position.y = Math.sin(time * 0.015) * 0.15;
+        if (currentSection === 'landing') {
+          robot.rotation.y = currentScroll * Math.PI * 2.5; 
+          const scale = 1.0 - (currentScroll * 0.25);
+          robot.scale.set(scale, scale, scale);
+          robot.position.x = -currentScroll * 0.5;
+          robot.userData.baseY = -currentScroll * 1.5;
+          robot.position.z = -currentScroll * 1.0;
+        } else if (currentSection === 'auth') {
+          robot.rotation.y = -Math.PI / 4 + currentScroll * Math.PI * 0.4;
+          robot.scale.set(0.65, 0.65, 0.65);
+          robot.position.x = -1.8 + currentScroll * 0.3;
+          robot.userData.baseY = 0.5 - currentScroll * 0.8;
+          robot.position.z = 0;
+        } else if (currentSection === 'profile') {
+          robot.rotation.y = Math.PI / 4 - currentScroll * Math.PI * 0.4;
+          robot.scale.set(0.7, 0.7, 0.7);
+          robot.position.x = 1.8 - currentScroll * 0.3;
+          robot.userData.baseY = 0.5 - currentScroll * 0.8;
+          robot.position.z = 0;
+        } else if (currentSection === 'dashboard') {
+          robot.rotation.y = currentScroll * Math.PI * 2.0;
+          robot.scale.set(0.4, 0.4, 0.4);
+          robot.position.x = 2.4 - currentScroll * 0.8;
+          robot.userData.baseY = 1.6 - currentScroll * 0.6;
+          robot.position.z = 0;
+        } else if (currentSection === 'whiteboard') {
+          robot.rotation.y = Math.PI / 6 + currentScroll * Math.PI * 0.3;
+          robot.scale.set(0.3, 0.3, 0.3);
+          robot.position.x = 2.8 - currentScroll * 0.5;
+          robot.userData.baseY = 2.0 - currentScroll * 0.5;
+          robot.position.z = 0;
+        }
+
+        // Apply float offset relative to scroll position
+        const baseY = robot.userData.baseY || 0;
+        robot.position.y = baseY + Math.sin(time * 0.015) * 0.15;
       }
 
       // Mouse tracking head rotation
@@ -382,55 +425,7 @@ export const RobotCanvas: React.FC<RobotCanvasProps> = ({
     };
   }, []);
 
-  // Handle updates in props (Scroll Linked Rotations & Placement)
-  useEffect(() => {
-    if (!robotGroupRef.current) return;
-    
-    // Just like the reference video:
-    // Scroll progress controls:
-    // 1. Robot Rotation (spinning Y-axis)
-    // 2. Robot scaling and vertical shift
-    
-    const robot = robotGroupRef.current;
-    
-    // We map activeSection and scrollProgress to position
-    if (activeSection === 'landing') {
-      // Rotation spins based on scrollProgress
-      robot.rotation.y = scrollProgress * Math.PI * 2.5; 
-      
-      // Zoom out robot slightly as we scroll down to make room for content cards
-      const scale = 1.0 - (scrollProgress * 0.25);
-      robot.scale.set(scale, scale, scale);
-      
-      // Move down slightly
-      robot.position.x = 0;
-      robot.position.z = 0;
-    } else if (activeSection === 'auth') {
-      // Rotate to profile angle and slide left
-      robot.rotation.y = -Math.PI / 4;
-      robot.scale.set(0.65, 0.65, 0.65);
-      robot.position.x = -1.8;
-      robot.position.y = 0.5;
-    } else if (activeSection === 'profile') {
-      // Move to right side
-      robot.rotation.y = Math.PI / 4;
-      robot.scale.set(0.7, 0.7, 0.7);
-      robot.position.x = 1.8;
-      robot.position.y = 0.5;
-    } else if (activeSection === 'dashboard') {
-      // Position small at top right header
-      robot.rotation.y = 0;
-      robot.scale.set(0.4, 0.4, 0.4);
-      robot.position.x = 2.4;
-      robot.position.y = 1.6;
-    } else if (activeSection === 'whiteboard') {
-      // Minimized to top right corner
-      robot.rotation.y = Math.PI / 6;
-      robot.scale.set(0.3, 0.3, 0.3);
-      robot.position.x = 2.8;
-      robot.position.y = 2.0;
-    }
-  }, [scrollProgress, activeSection]);
+
 
   return (
     <div 

@@ -155,4 +155,136 @@ const sendMatchRequest = async (req, res, next) => {
   } catch (err) { next(err) }
 }
 
-module.exports = { getMyMatches, getMatchSuggestions, runMatchingForMe, getMatchById, acceptMatch, rejectMatch, blockMatch, sendMatchRequest }
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371 // Earth radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLon = (lon2 - lon1) * Math.PI / 180
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return R * c
+}
+
+const getNearbyLearners = async (req, res, next) => {
+  try {
+    const userId = req.user.id
+    const userProfile = await db.selectOne('profiles', 'latitude, longitude, city, country_code', { id: userId })
+    const userOffered = await db.select('user_skills_offered', 'skill_id', { user_id: userId })
+    
+    if (!userOffered || userOffered.length === 0) {
+      return res.status(200).json({ data: [] })
+    }
+    const offeredSkillIds = userOffered.map(s => s.skill_id)
+
+    const { data: candidates, error } = await supabaseAdmin
+      .from('profiles')
+      .select(`
+        id, full_name, avatar_url, avg_rating, total_sessions, reputation_points, location, city, state_code, latitude, longitude,
+        user_skills_wanted ( skill_id, skills ( name ) )
+      `)
+      .neq('id', userId)
+      .eq('is_profile_complete', true)
+
+    if (error) throw error
+    if (!candidates || candidates.length === 0) return res.status(200).json({ data: [] })
+
+    const learners = []
+    const socketServer = require('../websocket/socketServer.js')
+    const active = socketServer.activeUsers
+
+    for (const candidate of candidates) {
+      const wantedSkills = candidate.user_skills_wanted || []
+      const matchingSkills = wantedSkills.filter(s => offeredSkillIds.includes(s.skill_id)).map(s => s.skills?.name).filter(Boolean)
+      
+      if (matchingSkills.length > 0) {
+        let distance = null
+        if (userProfile?.latitude && userProfile?.longitude && candidate.latitude && candidate.longitude) {
+          distance = haversineDistance(userProfile.latitude, userProfile.longitude, candidate.latitude, candidate.longitude)
+        }
+        learners.push({
+          userId: candidate.id,
+          profile: candidate,
+          skillsWanted: matchingSkills,
+          skillsOffered: [],
+          distance: distance ? Math.round(distance * 10) / 10 : null,
+          isLive: active ? active.has(candidate.id) : false
+        })
+      }
+    }
+
+    learners.sort((a, b) => {
+      if (a.distance === null) return 1
+      if (b.distance === null) return -1
+      return a.distance - b.distance
+    })
+
+    return res.status(200).json({ data: learners })
+  } catch (err) { next(err) }
+}
+
+const getNearbyTeachers = async (req, res, next) => {
+  try {
+    const userId = req.user.id
+    const userProfile = await db.selectOne('profiles', 'latitude, longitude, city, country_code', { id: userId })
+    const userWanted = await db.select('user_skills_wanted', 'skill_id', { user_id: userId })
+
+    if (!userWanted || userWanted.length === 0) {
+      return res.status(200).json({ data: [] })
+    }
+    const wantedSkillIds = userWanted.map(s => s.skill_id)
+
+    const { data: candidates, error } = await supabaseAdmin
+      .from('profiles')
+      .select(`
+        id, full_name, avatar_url, avg_rating, total_sessions, reputation_points, location, city, state_code, latitude, longitude,
+        user_skills_offered ( skill_id, skills ( name ) )
+      `)
+      .neq('id', userId)
+      .eq('is_profile_complete', true)
+
+    if (error) throw error
+    if (!candidates || candidates.length === 0) return res.status(200).json({ data: [] })
+
+    const teachers = []
+    const socketServer = require('../websocket/socketServer.js')
+    const active = socketServer.activeUsers
+
+    for (const candidate of candidates) {
+      const offeredSkills = candidate.user_skills_offered || []
+      const matchingSkills = offeredSkills.filter(s => wantedSkillIds.includes(s.skill_id)).map(s => s.skills?.name).filter(Boolean)
+
+      if (matchingSkills.length > 0) {
+        let distance = null
+        if (userProfile?.latitude && userProfile?.longitude && candidate.latitude && candidate.longitude) {
+          distance = haversineDistance(userProfile.latitude, userProfile.longitude, candidate.latitude, candidate.longitude)
+        }
+        teachers.push({
+          userId: candidate.id,
+          profile: candidate,
+          skillsOffered: matchingSkills,
+          skillsWanted: [],
+          distance: distance ? Math.round(distance * 10) / 10 : null,
+          isLive: active ? active.has(candidate.id) : false
+        })
+      }
+    }
+
+    teachers.sort((a, b) => {
+      if (a.isLive && !b.isLive) return -1
+      if (!a.isLive && b.isLive) return 1
+      if (a.distance === null) return 1
+      if (b.distance === null) return -1
+      return a.distance - b.distance
+    })
+
+    return res.status(200).json({ data: teachers })
+  } catch (err) { next(err) }
+}
+
+module.exports = {
+  getMyMatches, getMatchSuggestions, runMatchingForMe, getMatchById,
+  acceptMatch, rejectMatch, blockMatch, sendMatchRequest,
+  getNearbyLearners, getNearbyTeachers
+}

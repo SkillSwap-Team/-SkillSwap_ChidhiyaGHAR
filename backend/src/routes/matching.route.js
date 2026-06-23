@@ -8,6 +8,8 @@ router.use(verifyToken, normalLimiter)
 
 router.get('/', matchingController.getMyMatches)
 router.get('/suggestions', matchingController.getMatchSuggestions)
+router.get('/nearby-learners', matchingController.getNearbyLearners)
+router.get('/nearby-teachers', matchingController.getNearbyTeachers)
 router.post('/run', aiLimiter, matchingController.runMatchingForMe)
 router.get('/:matchId', matchingController.getMatchById)
 router.post('/:matchId/accept', matchingController.acceptMatch)

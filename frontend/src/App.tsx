@@ -44,22 +44,21 @@ function App() {
   // Whiteboard meet details
   const [activeRoom, setActiveRoom] = useState<{ tutor: string; student: string; skill: string } | null>(null);
 
-  // Monitor Landing page scrolling
+  // Monitor page scrolling for mascot tracking
   useEffect(() => {
-    if (view !== 'landing') {
-      setScrollProgress(0);
-      return;
-    }
-
     const handleScroll = () => {
       const scrollTop = window.scrollY || window.pageYOffset || document.documentElement.scrollTop;
       const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
-      if (scrollHeight <= 0) return;
+      if (scrollHeight <= 0) {
+        setScrollProgress(0);
+        return;
+      }
       const progress = scrollTop / scrollHeight;
       setScrollProgress(Math.min(1.0, Math.max(0, progress)));
     };
 
     window.addEventListener('scroll', handleScroll);
+    handleScroll();
     return () => window.removeEventListener('scroll', handleScroll);
   }, [view]);
 
