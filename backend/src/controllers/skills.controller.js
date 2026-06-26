@@ -86,9 +86,9 @@ const getMyWantedSkills = async (req, res, next) => {
 const addOfferedSkill = async (req, res, next) => {
   try {
     const { skill_id, proficiency_level, years_experience, description } = req.body
-    const [result] = await db.insert('user_skills_offered', {
+    const [result] = await db.upsert('user_skills_offered', {
       user_id: req.user.id, skill_id, proficiency_level, years_experience, description
-    })
+    }, { onConflict: 'user_id,skill_id' })
     // Async: generate embedding
     setImmediate(async () => {
       try {
@@ -125,9 +125,9 @@ const removeOfferedSkill = async (req, res, next) => {
 const addWantedSkill = async (req, res, next) => {
   try {
     const { skill_id, current_level, target_level, urgency, notes } = req.body
-    const [result] = await db.insert('user_skills_wanted', {
+    const [result] = await db.upsert('user_skills_wanted', {
       user_id: req.user.id, skill_id, current_level, target_level, urgency: urgency || 'medium', notes
-    })
+    }, { onConflict: 'user_id,skill_id' })
     return res.status(201).json({ data: result, message: 'Skill added to wanted list.' })
   } catch (err) { next(err) }
 }

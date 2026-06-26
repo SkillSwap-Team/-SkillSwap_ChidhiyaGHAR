@@ -16,41 +16,28 @@ final dioProvider = Provider<Dio>((ref) {
     headers: {'Content-Type': 'application/json'},
   ));
 
-  // ── Auth interceptor (attach token + refresh on 401) ─────────
+  // ── Auth interceptor (attach token + clear on 401) ───────────
   dio.interceptors.add(InterceptorsWrapper(
     onRequest: (options, handler) async {
-      final token = await storage.getAccessToken();
-      if (token != null) {
-        options.headers['Authorization'] = 'Bearer $token';
+      debugPrint('[DIO_CLIENT] onRequest: ${options.path}');
+      try {
+        final token = await storage.getAccessToken();
+        debugPrint('[DIO_CLIENT] token retrieved: ${token != null ? "length: ${token.length}" : "null"}');
+        if (token != null) {
+          options.headers['Authorization'] = 'Bearer $token';
+          debugPrint('[DIO_CLIENT] Attached Authorization Header');
+        } else {
+          debugPrint('[DIO_CLIENT] Warning: Token is null, NOT attaching Authorization Header');
+        }
+      } catch (e) {
+        debugPrint('[DIO_CLIENT] Exception retrieving token: $e');
       }
       return handler.next(options);
     },
     onError: (error, handler) async {
       if (error.response?.statusCode == 401) {
-        final refreshToken = await storage.getRefreshToken();
-        if (refreshToken != null) {
-          try {
-            final freshDio = Dio(BaseOptions(baseUrl: ApiConstants.baseUrl));
-            final response = await freshDio.post(
-              ApiConstants.authRefreshToken,
-              data: {'refreshToken': refreshToken},
-            );
-            final data = response.data as Map<String, dynamic>;
-            final newAccess  = data['accessToken'] as String;
-            final newRefresh = data['refreshToken'] as String;
-            await storage.saveAccessToken(newAccess);
-            await storage.saveRefreshToken(newRefresh);
-
-            // Retry the original request with the new token
-            final opts = error.requestOptions;
-            opts.headers['Authorization'] = 'Bearer $newAccess';
-            final retryResponse = await freshDio.fetch(opts);
-            return handler.resolve(retryResponse);
-          } catch (_) {
-            // Refresh failed — clear tokens (forces re-login)
-            await storage.clearTokens();
-          }
-        }
+        debugPrint('[DIO_CLIENT] Received 401 Unauthorized — clearing cached tokens');
+        await storage.clearTokens();
       }
       return handler.next(error);
     },

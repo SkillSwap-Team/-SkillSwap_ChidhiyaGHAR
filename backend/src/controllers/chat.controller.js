@@ -1,6 +1,27 @@
 const { supabaseAdmin } = require('../config/supabaseClient')
 const db = require('../services/db.js')
 const logger = require('../utils/logger.js')
+const { evaluateUserBadges } = require('../services/badgeEngine.js')
+
+async function addActivity({ userId, actorId, type, title, body = null, points = 1, referenceId = null }) {
+  try {
+    const record = await db.insert('activities', {
+      user_id: userId,
+      actor_id: actorId ?? userId,
+      type,
+      title,
+      body,
+      points,
+      reference_id: referenceId
+    })
+
+    await supabaseAdmin.rpc('increment_activity', { user_id_input: userId, points_input: points }).catch(() => {})
+    return record
+  } catch (err) {
+    logger.warn(`[Activity] Failed to record ${type} for ${userId}: ${err.message}`)
+    return null
+  }
+}
 
 // ✅ GET /api/chat/conversations
 const getConversations = async (req, res, next) => {
@@ -127,6 +148,19 @@ const sendMessage = async (req, res, next) => {
 
     // Update last message timestamp
     await db.update('conversations', { last_message_at: new Date().toISOString() }, { id: conversationId })
+
+    // Track chat activity (+1 per message) in activities + async RPC
+    setImmediate(() => {
+      addActivity({
+        userId,
+        actorId: userId,
+        type: 'chat_sent',
+        title: 'New chat message',
+        body: text,
+        points: 1,
+        referenceId: message.id
+      }).then(() => evaluateUserBadges(userId)).catch(() => {})
+    })
 
     // Emit WebSocket event to recipient
     const recipientId = conv.user_a_id === userId ? conv.user_b_id : conv.user_a_id

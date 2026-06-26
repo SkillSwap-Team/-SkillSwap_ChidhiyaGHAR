@@ -29,12 +29,11 @@ import '../../features/reviews/screens/reviews_screen.dart';
 import '../../features/video_call/screens/video_call_screen.dart';
 import '../../features/whiteboard/screens/whiteboard_screen.dart';
 
-// ═══════════════════════════════════════════════════════════════════
-//  GoRouter Provider
-// ═══════════════════════════════════════════════════════════════════
+final rootNavigatorKey = GlobalKey<NavigatorState>();
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
+    navigatorKey: rootNavigatorKey,
     initialLocation: '/splash',
     debugLogDiagnostics: true,
     routes: [

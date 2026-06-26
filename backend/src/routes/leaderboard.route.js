@@ -8,5 +8,6 @@ router.use(verifyToken, normalLimiter)
 
 router.get('/', leaderboardController.getLeaderboard)
 router.get('/rank/:userId', leaderboardController.getUserLeaderboardRank)
+router.get('/activity', leaderboardController.getActivityLeaderboard)
 
 module.exports = router

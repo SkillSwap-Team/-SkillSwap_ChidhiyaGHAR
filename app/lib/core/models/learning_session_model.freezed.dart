@@ -24,9 +24,9 @@ mixin _$LearningSessionModel {
   @JsonKey(name: 'match_id')
   String? get matchId => throw _privateConstructorUsedError;
   @JsonKey(name: 'host_id')
-  String get hostId => throw _privateConstructorUsedError;
+  String? get hostId => throw _privateConstructorUsedError;
   @JsonKey(name: 'participant_id')
-  String get participantId => throw _privateConstructorUsedError;
+  String? get participantId => throw _privateConstructorUsedError;
   String get title => throw _privateConstructorUsedError;
   String? get description => throw _privateConstructorUsedError;
   @JsonKey(name: 'scheduled_at')
@@ -45,7 +45,12 @@ mixin _$LearningSessionModel {
   @JsonKey(name: 'participant_attendance')
   bool get participantAttendance => throw _privateConstructorUsedError;
   @JsonKey(name: 'created_at')
-  DateTime? get createdAt => throw _privateConstructorUsedError;
+  DateTime? get createdAt =>
+      throw _privateConstructorUsedError; // Nested join data from Supabase
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  dynamic get host => throw _privateConstructorUsedError;
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  dynamic get participant => throw _privateConstructorUsedError;
 
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
   @JsonKey(ignore: true)
@@ -62,8 +67,8 @@ abstract class $LearningSessionModelCopyWith<$Res> {
   $Res call(
       {String id,
       @JsonKey(name: 'match_id') String? matchId,
-      @JsonKey(name: 'host_id') String hostId,
-      @JsonKey(name: 'participant_id') String participantId,
+      @JsonKey(name: 'host_id') String? hostId,
+      @JsonKey(name: 'participant_id') String? participantId,
       String title,
       String? description,
       @JsonKey(name: 'scheduled_at') DateTime scheduledAt,
@@ -74,7 +79,10 @@ abstract class $LearningSessionModelCopyWith<$Res> {
       @JsonKey(name: 'session_notes') String? sessionNotes,
       @JsonKey(name: 'host_attendance') bool hostAttendance,
       @JsonKey(name: 'participant_attendance') bool participantAttendance,
-      @JsonKey(name: 'created_at') DateTime? createdAt});
+      @JsonKey(name: 'created_at') DateTime? createdAt,
+      @JsonKey(includeFromJson: false, includeToJson: false) dynamic host,
+      @JsonKey(includeFromJson: false, includeToJson: false)
+      dynamic participant});
 }
 
 /// @nodoc
@@ -93,8 +101,8 @@ class _$LearningSessionModelCopyWithImpl<$Res,
   $Res call({
     Object? id = null,
     Object? matchId = freezed,
-    Object? hostId = null,
-    Object? participantId = null,
+    Object? hostId = freezed,
+    Object? participantId = freezed,
     Object? title = null,
     Object? description = freezed,
     Object? scheduledAt = null,
@@ -106,6 +114,8 @@ class _$LearningSessionModelCopyWithImpl<$Res,
     Object? hostAttendance = null,
     Object? participantAttendance = null,
     Object? createdAt = freezed,
+    Object? host = freezed,
+    Object? participant = freezed,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -116,14 +126,14 @@ class _$LearningSessionModelCopyWithImpl<$Res,
           ? _value.matchId
           : matchId // ignore: cast_nullable_to_non_nullable
               as String?,
-      hostId: null == hostId
+      hostId: freezed == hostId
           ? _value.hostId
           : hostId // ignore: cast_nullable_to_non_nullable
-              as String,
-      participantId: null == participantId
+              as String?,
+      participantId: freezed == participantId
           ? _value.participantId
           : participantId // ignore: cast_nullable_to_non_nullable
-              as String,
+              as String?,
       title: null == title
           ? _value.title
           : title // ignore: cast_nullable_to_non_nullable
@@ -168,6 +178,14 @@ class _$LearningSessionModelCopyWithImpl<$Res,
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
               as DateTime?,
+      host: freezed == host
+          ? _value.host
+          : host // ignore: cast_nullable_to_non_nullable
+              as dynamic,
+      participant: freezed == participant
+          ? _value.participant
+          : participant // ignore: cast_nullable_to_non_nullable
+              as dynamic,
     ) as $Val);
   }
 }
@@ -183,8 +201,8 @@ abstract class _$$LearningSessionModelImplCopyWith<$Res>
   $Res call(
       {String id,
       @JsonKey(name: 'match_id') String? matchId,
-      @JsonKey(name: 'host_id') String hostId,
-      @JsonKey(name: 'participant_id') String participantId,
+      @JsonKey(name: 'host_id') String? hostId,
+      @JsonKey(name: 'participant_id') String? participantId,
       String title,
       String? description,
       @JsonKey(name: 'scheduled_at') DateTime scheduledAt,
@@ -195,7 +213,10 @@ abstract class _$$LearningSessionModelImplCopyWith<$Res>
       @JsonKey(name: 'session_notes') String? sessionNotes,
       @JsonKey(name: 'host_attendance') bool hostAttendance,
       @JsonKey(name: 'participant_attendance') bool participantAttendance,
-      @JsonKey(name: 'created_at') DateTime? createdAt});
+      @JsonKey(name: 'created_at') DateTime? createdAt,
+      @JsonKey(includeFromJson: false, includeToJson: false) dynamic host,
+      @JsonKey(includeFromJson: false, includeToJson: false)
+      dynamic participant});
 }
 
 /// @nodoc
@@ -211,8 +232,8 @@ class __$$LearningSessionModelImplCopyWithImpl<$Res>
   $Res call({
     Object? id = null,
     Object? matchId = freezed,
-    Object? hostId = null,
-    Object? participantId = null,
+    Object? hostId = freezed,
+    Object? participantId = freezed,
     Object? title = null,
     Object? description = freezed,
     Object? scheduledAt = null,
@@ -224,6 +245,8 @@ class __$$LearningSessionModelImplCopyWithImpl<$Res>
     Object? hostAttendance = null,
     Object? participantAttendance = null,
     Object? createdAt = freezed,
+    Object? host = freezed,
+    Object? participant = freezed,
   }) {
     return _then(_$LearningSessionModelImpl(
       id: null == id
@@ -234,14 +257,14 @@ class __$$LearningSessionModelImplCopyWithImpl<$Res>
           ? _value.matchId
           : matchId // ignore: cast_nullable_to_non_nullable
               as String?,
-      hostId: null == hostId
+      hostId: freezed == hostId
           ? _value.hostId
           : hostId // ignore: cast_nullable_to_non_nullable
-              as String,
-      participantId: null == participantId
+              as String?,
+      participantId: freezed == participantId
           ? _value.participantId
           : participantId // ignore: cast_nullable_to_non_nullable
-              as String,
+              as String?,
       title: null == title
           ? _value.title
           : title // ignore: cast_nullable_to_non_nullable
@@ -286,6 +309,14 @@ class __$$LearningSessionModelImplCopyWithImpl<$Res>
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
               as DateTime?,
+      host: freezed == host
+          ? _value.host
+          : host // ignore: cast_nullable_to_non_nullable
+              as dynamic,
+      participant: freezed == participant
+          ? _value.participant
+          : participant // ignore: cast_nullable_to_non_nullable
+              as dynamic,
     ));
   }
 }
@@ -296,9 +327,9 @@ class _$LearningSessionModelImpl implements _LearningSessionModel {
   const _$LearningSessionModelImpl(
       {required this.id,
       @JsonKey(name: 'match_id') this.matchId,
-      @JsonKey(name: 'host_id') required this.hostId,
-      @JsonKey(name: 'participant_id') required this.participantId,
-      required this.title,
+      @JsonKey(name: 'host_id') this.hostId,
+      @JsonKey(name: 'participant_id') this.participantId,
+      this.title = 'Session',
       this.description,
       @JsonKey(name: 'scheduled_at') required this.scheduledAt,
       @JsonKey(name: 'duration_minutes') this.durationMinutes = 60,
@@ -309,7 +340,9 @@ class _$LearningSessionModelImpl implements _LearningSessionModel {
       @JsonKey(name: 'host_attendance') this.hostAttendance = false,
       @JsonKey(name: 'participant_attendance')
       this.participantAttendance = false,
-      @JsonKey(name: 'created_at') this.createdAt});
+      @JsonKey(name: 'created_at') this.createdAt,
+      @JsonKey(includeFromJson: false, includeToJson: false) this.host,
+      @JsonKey(includeFromJson: false, includeToJson: false) this.participant});
 
   factory _$LearningSessionModelImpl.fromJson(Map<String, dynamic> json) =>
       _$$LearningSessionModelImplFromJson(json);
@@ -321,11 +354,12 @@ class _$LearningSessionModelImpl implements _LearningSessionModel {
   final String? matchId;
   @override
   @JsonKey(name: 'host_id')
-  final String hostId;
+  final String? hostId;
   @override
   @JsonKey(name: 'participant_id')
-  final String participantId;
+  final String? participantId;
   @override
+  @JsonKey()
   final String title;
   @override
   final String? description;
@@ -356,10 +390,17 @@ class _$LearningSessionModelImpl implements _LearningSessionModel {
   @override
   @JsonKey(name: 'created_at')
   final DateTime? createdAt;
+// Nested join data from Supabase
+  @override
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  final dynamic host;
+  @override
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  final dynamic participant;
 
   @override
   String toString() {
-    return 'LearningSessionModel(id: $id, matchId: $matchId, hostId: $hostId, participantId: $participantId, title: $title, description: $description, scheduledAt: $scheduledAt, durationMinutes: $durationMinutes, actualDurationMinutes: $actualDurationMinutes, status: $status, agoraChannel: $agoraChannel, sessionNotes: $sessionNotes, hostAttendance: $hostAttendance, participantAttendance: $participantAttendance, createdAt: $createdAt)';
+    return 'LearningSessionModel(id: $id, matchId: $matchId, hostId: $hostId, participantId: $participantId, title: $title, description: $description, scheduledAt: $scheduledAt, durationMinutes: $durationMinutes, actualDurationMinutes: $actualDurationMinutes, status: $status, agoraChannel: $agoraChannel, sessionNotes: $sessionNotes, hostAttendance: $hostAttendance, participantAttendance: $participantAttendance, createdAt: $createdAt, host: $host, participant: $participant)';
   }
 
   @override
@@ -391,7 +432,10 @@ class _$LearningSessionModelImpl implements _LearningSessionModel {
             (identical(other.participantAttendance, participantAttendance) ||
                 other.participantAttendance == participantAttendance) &&
             (identical(other.createdAt, createdAt) ||
-                other.createdAt == createdAt));
+                other.createdAt == createdAt) &&
+            const DeepCollectionEquality().equals(other.host, host) &&
+            const DeepCollectionEquality()
+                .equals(other.participant, participant));
   }
 
   @JsonKey(ignore: true)
@@ -412,7 +456,9 @@ class _$LearningSessionModelImpl implements _LearningSessionModel {
       sessionNotes,
       hostAttendance,
       participantAttendance,
-      createdAt);
+      createdAt,
+      const DeepCollectionEquality().hash(host),
+      const DeepCollectionEquality().hash(participant));
 
   @JsonKey(ignore: true)
   @override
@@ -434,9 +480,9 @@ abstract class _LearningSessionModel implements LearningSessionModel {
   const factory _LearningSessionModel(
       {required final String id,
       @JsonKey(name: 'match_id') final String? matchId,
-      @JsonKey(name: 'host_id') required final String hostId,
-      @JsonKey(name: 'participant_id') required final String participantId,
-      required final String title,
+      @JsonKey(name: 'host_id') final String? hostId,
+      @JsonKey(name: 'participant_id') final String? participantId,
+      final String title,
       final String? description,
       @JsonKey(name: 'scheduled_at') required final DateTime scheduledAt,
       @JsonKey(name: 'duration_minutes') final int durationMinutes,
@@ -447,8 +493,10 @@ abstract class _LearningSessionModel implements LearningSessionModel {
       @JsonKey(name: 'session_notes') final String? sessionNotes,
       @JsonKey(name: 'host_attendance') final bool hostAttendance,
       @JsonKey(name: 'participant_attendance') final bool participantAttendance,
-      @JsonKey(name: 'created_at')
-      final DateTime? createdAt}) = _$LearningSessionModelImpl;
+      @JsonKey(name: 'created_at') final DateTime? createdAt,
+      @JsonKey(includeFromJson: false, includeToJson: false) final dynamic host,
+      @JsonKey(includeFromJson: false, includeToJson: false)
+      final dynamic participant}) = _$LearningSessionModelImpl;
 
   factory _LearningSessionModel.fromJson(Map<String, dynamic> json) =
       _$LearningSessionModelImpl.fromJson;
@@ -460,10 +508,10 @@ abstract class _LearningSessionModel implements LearningSessionModel {
   String? get matchId;
   @override
   @JsonKey(name: 'host_id')
-  String get hostId;
+  String? get hostId;
   @override
   @JsonKey(name: 'participant_id')
-  String get participantId;
+  String? get participantId;
   @override
   String get title;
   @override
@@ -494,6 +542,12 @@ abstract class _LearningSessionModel implements LearningSessionModel {
   @override
   @JsonKey(name: 'created_at')
   DateTime? get createdAt;
+  @override // Nested join data from Supabase
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  dynamic get host;
+  @override
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  dynamic get participant;
   @override
   @JsonKey(ignore: true)
   _$$LearningSessionModelImplCopyWith<_$LearningSessionModelImpl>

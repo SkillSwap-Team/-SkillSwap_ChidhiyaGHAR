@@ -15,8 +15,8 @@ const handleValidationErrors = (req, res, next) => {
 // ✅ Auth validators
 const registerValidator = [
   body('email').isEmail().normalizeEmail().withMessage('Valid email required'),
-  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
-  body('username').optional().matches(/^[a-zA-Z0-9_]{3,30}$/).withMessage('Username must be 3-30 chars, letters/numbers/underscore only'),
+  body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
+  body('username').optional().isLength({ min: 3, max: 50 }).trim().withMessage('Username must be 3-50 characters'),
   handleValidationErrors
 ]
 
@@ -84,11 +84,11 @@ const createReviewValidator = [
 
 // ✅ Session validators
 const createSessionValidator = [
-  body('match_id').isUUID().withMessage('Valid match_id required'),
+  body('participantId').optional().isUUID().withMessage('Valid participantId UUID required'),
+  body('matchId').optional().isUUID().withMessage('Valid matchId UUID required'),
   body('title').notEmpty().isLength({ max: 200 }).trim().withMessage('Session title required'),
-  body('scheduled_at').isISO8601().withMessage('Valid scheduled_at datetime required'),
-  body('duration_minutes').optional().isInt({ min: 15, max: 480 }).withMessage('Duration must be 15-480 minutes'),
-  body('skill_id').optional().isUUID(),
+  body('scheduledAt').isISO8601().withMessage('Valid scheduled_at datetime required'),
+  body('durationMinutes').optional().isInt({ min: 15, max: 480 }).withMessage('Duration must be 15-480 minutes'),
   handleValidationErrors
 ]
 

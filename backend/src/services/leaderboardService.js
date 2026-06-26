@@ -110,11 +110,13 @@ async function getUserRank(userId, period = 'allTime') {
 }
 
 // ✅ Fallback: compute leaderboard from DB
-async function computeLeaderboardFromDB(period = 'allTime', limit = 50) {
+async function computeLeaderboardFromDB(period = 'allTime', limit = 50, type = 'allTime') {
+  const scoreColumn = type === 'activity' ? 'activity_score' : 'reputation_points'
+
   const { data: profiles } = await supabaseAdmin
     .from('profiles')
-    .select('id, full_name, avatar_url, avg_rating, total_sessions, reputation_points')
-    .order('reputation_points', { ascending: false })
+    .select('id, full_name, avatar_url, avg_rating, total_sessions, activity_score, reputation_points')
+    .order(scoreColumn, { ascending: false })
     .limit(limit)
 
   if (!profiles) return []
@@ -132,8 +134,13 @@ async function computeLeaderboardFromDB(period = 'allTime', limit = 50) {
     userId: p.id,
     username: userMap.get(p.id)?.username,
     profile: p,
-    score: p.reputation_points
+    score: p[scoreColumn] || 0
   }))
+}
+
+// ✅ Compute activity leaderboard directly from DB
+async function getActivityLeaderboard({ limit = 50, offset = 0 } = {}) {
+  return computeLeaderboardFromDB('allTime', limit, 'activity')
 }
 
 // ✅ Rebuild Redis leaderboard from DB (called by leaderboardWorker)

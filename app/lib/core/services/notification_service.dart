@@ -137,6 +137,37 @@ class NotificationService {
     );
   }
 
+  /// Show a local notification programmatically.
+  Future<void> showNotification(String title, String body, {String? payload}) async {
+    const androidDetails = AndroidNotificationDetails(
+      'skillswap_high_importance',
+      'High Importance Notifications',
+      channelDescription: 'Used for important SkillSwap alerts like matches & session calls.',
+      importance: Importance.max,
+      priority: Priority.high,
+      icon: '@mipmap/ic_launcher',
+    );
+
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+
+    const details = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    await _localNotifications.show(
+      DateTime.now().millisecondsSinceEpoch.hashCode,
+      title,
+      body,
+      details,
+      payload: payload,
+    );
+  }
+
   /// Callback when user taps a local notification.
   void _onDidReceiveLocalNotification(NotificationResponse response) {
     debugPrint('[Notification] Local notification tapped with payload: ${response.payload}');

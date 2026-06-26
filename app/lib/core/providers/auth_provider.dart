@@ -4,7 +4,6 @@ import '../api/dio_client.dart';
 import '../api/api_exception.dart';
 import '../models/user_model.dart';
 import '../models/profile_model.dart';
-import '../models/auth_response_model.dart';
 import '../services/storage_service.dart';
 import '../services/socket_service.dart';
 import '../../config/api_constants.dart';
@@ -83,11 +82,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
       }
       // Verify token by fetching current user
       final response = await _api.get<Map<String, dynamic>>(ApiConstants.authMe);
-      final data = response['data'] as Map<String, dynamic>;
+      final dataMap = response['data'] as Map;
+      final data = Map<String, dynamic>.from(dataMap);
       final user = UserModel.fromJson(data);
       ProfileModel? profile;
       if (data['profile'] != null) {
-        profile = ProfileModel.fromJson(data['profile'] as Map<String, dynamic>);
+        profile = ProfileModel.fromJson(Map<String, dynamic>.from(data['profile'] as Map));
       }
       await _socketService.connect();
       state = state.copyWith(
@@ -241,25 +241,36 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> _handleAuthResponse(Map<String, dynamic> response) async {
-    final data = response['data'] is Map<String, dynamic> ? response['data'] as Map<String, dynamic> : response;
+    debugPrint('[AUTH_PROVIDER] _handleAuthResponse: response structure = $response');
+    final dataMap = response['data'] is Map ? response['data'] as Map : response;
+    final data = Map<String, dynamic>.from(dataMap);
     final accessToken  = data['accessToken'] as String?;
-    final refreshToken = data['refreshToken'] as String?;
 
-    if (accessToken != null) await _storage.saveAccessToken(accessToken);
-    if (refreshToken != null) await _storage.saveRefreshToken(refreshToken);
+    debugPrint('[AUTH_PROVIDER] accessToken parsed: ${accessToken != null ? "length: ${accessToken.length}" : "null"}');
+
+    if (accessToken != null) {
+      await _storage.saveAccessToken(accessToken);
+      debugPrint('[AUTH_PROVIDER] Saved accessToken to storage');
+    }
 
     UserModel? user;
     ProfileModel? profile;
 
-    if (data['user'] is Map<String, dynamic>) {
-      user = UserModel.fromJson(data['user'] as Map<String, dynamic>);
+    if (data['user'] is Map) {
+      user = UserModel.fromJson(Map<String, dynamic>.from(data['user'] as Map));
       await _storage.saveUserId(user.id);
+      debugPrint('[AUTH_PROVIDER] Saved userId: ${user.id}');
     }
-    if (data['profile'] is Map<String, dynamic>) {
-      profile = ProfileModel.fromJson(data['profile'] as Map<String, dynamic>);
+    if (data['profile'] is Map) {
+      profile = ProfileModel.fromJson(Map<String, dynamic>.from(data['profile'] as Map));
     }
 
-    await _socketService.connect();
+    try {
+      await _socketService.connect();
+      debugPrint('[AUTH_PROVIDER] Socket connected successfully');
+    } catch (e) {
+      debugPrint('[AUTH_PROVIDER] Socket connection failed: $e');
+    }
 
     state = state.copyWith(
       status: AuthStatus.authenticated,

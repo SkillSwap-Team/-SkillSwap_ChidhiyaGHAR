@@ -51,7 +51,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     if (!mounted) return;
     final state = ref.read(authProvider);
     if (state.isAuthenticated) {
-      context.go('/email-verification');
+      context.go('/onboarding');
     } else if (state.errorMessage != null) {
       AppSnackbar.show(context, message: state.errorMessage!, type: SnackbarType.error);
     }

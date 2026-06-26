@@ -1,5 +1,5 @@
 -- =======================================================
--- SkillSwap Database Schema (Production PostgreSQL + pgvector)
+-- SkillSwap Database Schema (NO RLS - safe to rerun)
 -- =======================================================
 
 -- ✅ Enable required extensions
@@ -7,7 +7,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE EXTENSION IF NOT EXISTS "vector"; -- pgvector
 
--- Create schemas if needed
+-- Create schema if needed
 CREATE SCHEMA IF NOT EXISTS public;
 
 -- =======================================================
@@ -61,17 +61,16 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   total_sessions integer NOT NULL DEFAULT 0,
   avg_rating double precision NOT NULL DEFAULT 0.0,
   total_reviews integer NOT NULL DEFAULT 0,
-  reputation_points integer NOT NULL DEFAULT 100, -- default starting points
-  activity_score integer NOT NULL DEFAULT 0, -- messages + calls + sessions-based
-  activity_snapshot jsonb DEFAULT '{}'::jsonb, -- breakdown by activity type
+  reputation_points integer NOT NULL DEFAULT 100,
+  activity_score integer NOT NULL DEFAULT 0,
+  activity_snapshot jsonb DEFAULT '{}'::jsonb,
   followers_count integer NOT NULL DEFAULT 0,
   following_count integer NOT NULL DEFAULT 0,
-  embedding vector(1536), -- 1536 dimensions for text-embedding-ada-002
+  embedding vector(1536),
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now()
 );
 
--- Index for vector search (cosine similarity)
 CREATE INDEX IF NOT EXISTS idx_profiles_embedding ON public.profiles USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 
 -- =======================================================
@@ -94,15 +93,13 @@ CREATE TABLE IF NOT EXISTS public.skill_categories (
 -- =======================================================
 CREATE TABLE IF NOT EXISTS public.skills (
   id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-  category_id uuid REFERENCES public.skill_categories(id) ON DELETE SET NULL,
-  name character varying(100) NOT NULL UNIQUE,
+  category_id uuid REFERENCES public.skill_categories(id),
+  name character varying(100) NOT NULL,
   slug character varying(100) NOT NULL UNIQUE,
   description text,
-  icon_url text,
-  tags text[],
-  usage_count integer NOT NULL DEFAULT 0,
   is_verified boolean NOT NULL DEFAULT false,
   is_active boolean NOT NULL DEFAULT true,
+  usage_count integer NOT NULL DEFAULT 0,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now()
 );
@@ -111,38 +108,36 @@ CREATE INDEX IF NOT EXISTS idx_skills_category ON public.skills(category_id);
 CREATE INDEX IF NOT EXISTS idx_skills_slug ON public.skills(slug);
 
 -- =======================================================
--- 5. User Offered Skills Table (with Embeddings)
+-- 5. User Skills Offered Table
 -- =======================================================
 CREATE TABLE IF NOT EXISTS public.user_skills_offered (
   id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   skill_id uuid NOT NULL REFERENCES public.skills(id) ON DELETE CASCADE,
-  proficiency_level character varying(20) NOT NULL CHECK (proficiency_level IN ('beginner', 'intermediate', 'advanced', 'expert')),
-  years_experience double precision DEFAULT 0.0,
+  proficiency_level character varying(20) NOT NULL DEFAULT 'beginner',
+  years_experience double precision,
   description text,
-  is_verified boolean NOT NULL DEFAULT false,
-  embedding vector(1536),
+  is_active boolean NOT NULL DEFAULT true,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT unique_user_offered_skill UNIQUE (user_id, skill_id)
+  CONSTRAINT unique_user_skill_offered UNIQUE (user_id, skill_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_user_skills_offered_user ON public.user_skills_offered(user_id);
-
 -- =======================================================
--- 6. User Wanted Skills Table
+-- 6. User Skills Wanted Table
 -- =======================================================
 CREATE TABLE IF NOT EXISTS public.user_skills_wanted (
   id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   skill_id uuid NOT NULL REFERENCES public.skills(id) ON DELETE CASCADE,
-  current_level character varying(20) DEFAULT 'beginner',
-  target_level character varying(20) DEFAULT 'intermediate',
-  urgency character varying(20) DEFAULT 'medium' CHECK (urgency IN ('low', 'medium', 'high')),
+  current_level character varying(20),
+  target_level character varying(20),
+  urgency character varying(20) DEFAULT 'medium',
   notes text,
+  is_active boolean NOT NULL DEFAULT true,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT unique_user_wanted_skill UNIQUE (user_id, skill_id)
+  CONSTRAINT unique_user_skill_wanted UNIQUE (user_id, skill_id)
 );
 
 -- =======================================================
@@ -151,11 +146,12 @@ CREATE TABLE IF NOT EXISTS public.user_skills_wanted (
 CREATE TABLE IF NOT EXISTS public.education (
   id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-  institution character varying(255) NOT NULL,
   degree character varying(100),
-  field_of_study character varying(150),
+  field_of_study character varying(100),
+  institution character varying(200),
   start_year integer,
   end_year integer,
+  is_current boolean NOT NULL DEFAULT false,
   description text,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now()
@@ -167,11 +163,12 @@ CREATE TABLE IF NOT EXISTS public.education (
 CREATE TABLE IF NOT EXISTS public.experience (
   id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-  company character varying(255) NOT NULL,
-  title character varying(150) NOT NULL,
-  start_date date,
-  end_date date,
-  is_current boolean DEFAULT false,
+  title character varying(100) NOT NULL,
+  company character varying(100),
+  location character varying(100),
+  start_date timestamp with time zone,
+  end_date timestamp with time zone,
+  is_current boolean NOT NULL DEFAULT false,
   description text,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now()
@@ -183,24 +180,29 @@ CREATE TABLE IF NOT EXISTS public.experience (
 CREATE TABLE IF NOT EXISTS public.availability (
   id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-  day_of_week integer NOT NULL CHECK (day_of_week BETWEEN 0 AND 6), -- 0=Sunday, 6=Saturday
-  start_time time without time zone NOT NULL,
-  end_time time without time zone NOT NULL,
+  day_of_week integer NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),
+  start_time time NOT NULL,
+  end_time time NOT NULL,
   timezone character varying(50) DEFAULT 'UTC',
-  is_recurring boolean DEFAULT true,
+  is_active boolean NOT NULL DEFAULT true,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT unique_user_availability_slot UNIQUE (user_id, day_of_week, start_time)
+  updated_at timestamp with time zone NOT NULL DEFAULT now()
 );
 
 -- =======================================================
--- 10. Follow System Table
+-- 10. User Follows Table
 -- =======================================================
 CREATE TABLE IF NOT EXISTS public.user_follows (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
   follower_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   following_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
-  PRIMARY KEY (follower_id, following_id)
+  CONSTRAINT unique_follow UNIQUE (follower_id, following_id),
+  CONSTRAINT no_self_follow CHECK (follower_id <> following_id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_follows_follower ON public.user_follows(follower_id);
+CREATE INDEX IF NOT EXISTS idx_follows_following ON public.user_follows(following_id);
 
 -- =======================================================
 -- 11. Matches Table
@@ -210,44 +212,50 @@ CREATE TABLE IF NOT EXISTS public.matches (
   user_a_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   user_b_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   status character varying(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected', 'blocked')),
-  user_a_action character varying(20) DEFAULT 'none',
-  user_b_action character varying(20) DEFAULT 'none',
-  match_score double precision DEFAULT 0.0,
-  skill_similarity_score double precision DEFAULT 0.0,
-  availability_score double precision DEFAULT 0.0,
-  reputation_score double precision DEFAULT 0.0,
-  ai_explanation text,
-  matched_skills text[],
-  initiated_by uuid REFERENCES public.users(id) ON DELETE SET NULL,
-  expires_at timestamp with time zone,
+  match_score double precision,
+  match_reason text,
+  matched_at timestamp with time zone DEFAULT now(),
   created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now()
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT unique_match UNIQUE (user_a_id, user_b_id),
+  CONSTRAINT no_self_match CHECK (user_a_id <> user_b_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_matches_users ON public.matches(user_a_id, user_b_id);
+CREATE INDEX IF NOT EXISTS idx_matches_user_a ON public.matches(user_a_id);
+CREATE INDEX IF NOT EXISTS idx_matches_user_b ON public.matches(user_b_id);
 
 -- =======================================================
 -- 12. Learning Sessions Table
 -- =======================================================
 CREATE TABLE IF NOT EXISTS public.learning_sessions (
   id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-  match_id uuid REFERENCES public.matches(id) ON DELETE SET NULL,
   host_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   participant_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-  title character varying(255) NOT NULL,
+  match_id uuid REFERENCES public.matches(id) ON DELETE SET NULL,
+  title character varying(200) NOT NULL,
   description text,
+  skill_id uuid REFERENCES public.skills(id) ON DELETE SET NULL,
   scheduled_at timestamp with time zone NOT NULL,
-  duration_minutes integer NOT NULL,
-  actual_duration_minutes integer,
+  duration_minutes integer NOT NULL DEFAULT 60,
   status character varying(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'completed', 'cancelled', 'no_show')),
-  cancellation_reason text,
-  agora_channel character varying(100),
+  actual_duration_minutes integer,
+  host_rating integer CHECK (host_rating BETWEEN 1 AND 5),
+  participant_rating integer CHECK (participant_rating BETWEEN 1 AND 5),
+  host_attendance boolean,
+  participant_attendance boolean,
   session_notes text,
-  host_attendance boolean DEFAULT false,
-  participant_attendance boolean DEFAULT false,
+  cancellation_reason text,
+  room_id character varying(100),
+  agora_channel character varying(100),
+  recording_url text,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now()
 );
+
+CREATE INDEX IF NOT EXISTS idx_sessions_host ON public.learning_sessions(host_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_participant ON public.learning_sessions(participant_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_status ON public.learning_sessions(status);
+CREATE INDEX IF NOT EXISTS idx_sessions_scheduled ON public.learning_sessions(scheduled_at);
 
 -- =======================================================
 -- 13. Reviews Table
@@ -258,17 +266,18 @@ CREATE TABLE IF NOT EXISTS public.reviews (
   reviewer_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   reviewee_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   rating integer NOT NULL CHECK (rating BETWEEN 1 AND 5),
-  comment text,
-  response_comment text,
+  content text,
+  is_public boolean NOT NULL DEFAULT true,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT reviews_unique UNIQUE (session_id, reviewer_id)
+  CONSTRAINT unique_session_reviewer UNIQUE (session_id, reviewer_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_reviews_reviewee_id ON public.reviews(reviewee_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_reviewee ON public.reviews(reviewee_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_session ON public.reviews(session_id);
 
 -- =======================================================
--- 14. Reputation Points Ledger Table
+-- 14. Reputation Points Table
 -- =======================================================
 CREATE TABLE IF NOT EXISTS public.reputation_points (
   id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -279,6 +288,8 @@ CREATE TABLE IF NOT EXISTS public.reputation_points (
   reference_id uuid,
   created_at timestamp with time zone NOT NULL DEFAULT now()
 );
+
+CREATE INDEX IF NOT EXISTS idx_reputation_user ON public.reputation_points(user_id);
 
 -- =======================================================
 -- 15. Badge Definitions Table
@@ -313,11 +324,15 @@ CREATE TABLE IF NOT EXISTS public.conversations (
   id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_a_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   user_b_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-  last_message_at timestamp with time zone NOT NULL DEFAULT now(),
+  last_message_at timestamp with time zone,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT unique_conversation_pair UNIQUE (user_a_id, user_b_id)
+  CONSTRAINT unique_conversation UNIQUE (user_a_id, user_b_id),
+  CONSTRAINT no_self_conversation CHECK (user_a_id <> user_b_id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_conversations_user_a ON public.conversations(user_a_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_user_b ON public.conversations(user_b_id);
 
 -- =======================================================
 -- 18. Messages Table
@@ -326,16 +341,19 @@ CREATE TABLE IF NOT EXISTS public.messages (
   id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
   conversation_id uuid NOT NULL REFERENCES public.conversations(id) ON DELETE CASCADE,
   sender_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-  text text NOT NULL,
+  content text NOT NULL,
+  message_type character varying(20) NOT NULL DEFAULT 'text' CHECK (message_type IN ('text', 'image', 'file', 'voice', 'video', 'system')),
   attachment_url text,
-  attachment_type character varying(50),
+  reply_to_id uuid REFERENCES public.messages(id) ON DELETE SET NULL,
   is_read boolean NOT NULL DEFAULT false,
   read_at timestamp with time zone,
-  deleted_at timestamp with time zone,
-  created_at timestamp with time zone NOT NULL DEFAULT now()
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON public.messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_messages_sender ON public.messages(sender_id);
+CREATE INDEX IF NOT EXISTS idx_messages_created ON public.messages(created_at);
 
 -- =======================================================
 -- 19. Message Reactions Table
@@ -344,9 +362,9 @@ CREATE TABLE IF NOT EXISTS public.message_reactions (
   id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
   message_id uuid NOT NULL REFERENCES public.messages(id) ON DELETE CASCADE,
   user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-  emoji character varying(50) NOT NULL,
+  emoji character varying(20) NOT NULL,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT unique_message_reaction UNIQUE (message_id, user_id)
+  CONSTRAINT unique_message_reaction UNIQUE (message_id, user_id, emoji)
 );
 
 -- =======================================================
@@ -355,44 +373,48 @@ CREATE TABLE IF NOT EXISTS public.message_reactions (
 CREATE TABLE IF NOT EXISTS public.notifications (
   id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-  actor_id uuid REFERENCES public.users(id) ON DELETE SET NULL,
   type character varying(50) NOT NULL,
-  title text NOT NULL,
+  title character varying(200) NOT NULL,
   body text,
-  data jsonb,
+  data jsonb DEFAULT '{}'::jsonb,
   is_read boolean NOT NULL DEFAULT false,
   read_at timestamp with time zone,
   created_at timestamp with time zone NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON public.notifications(user_id) WHERE (is_read = false);
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON public.notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_read ON public.notifications(is_read);
 
 -- =======================================================
 -- 21. Notification Preferences Table
 -- =======================================================
 CREATE TABLE IF NOT EXISTS public.notification_preferences (
-  user_id uuid PRIMARY KEY REFERENCES public.users(id) ON DELETE CASCADE,
-  email_matches boolean DEFAULT true,
-  email_sessions boolean DEFAULT true,
-  email_messages boolean DEFAULT true,
-  email_badges boolean DEFAULT true,
-  push_matches boolean DEFAULT true,
-  push_sessions boolean DEFAULT true,
-  push_messages boolean DEFAULT true,
-  push_badges boolean DEFAULT true,
-  created_at timestamp with time zone NOT NULL DEFAULT now()
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE UNIQUE,
+  email_notifications boolean NOT NULL DEFAULT true,
+  push_notifications boolean NOT NULL DEFAULT true,
+  session_reminders boolean NOT NULL DEFAULT true,
+  new_messages boolean NOT NULL DEFAULT true,
+  new_followers boolean NOT NULL DEFAULT true,
+  session_confirmations boolean NOT NULL DEFAULT true,
+  marketing_emails boolean NOT NULL DEFAULT false,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now()
 );
 
 -- =======================================================
 -- 22. User Settings Table
 -- =======================================================
 CREATE TABLE IF NOT EXISTS public.user_settings (
-  user_id uuid PRIMARY KEY REFERENCES public.users(id) ON DELETE CASCADE,
-  profile_visibility character varying(20) DEFAULT 'public',
-  show_location boolean DEFAULT true,
-  allow_matching boolean DEFAULT true,
-  theme character varying(20) DEFAULT 'dark',
-  created_at timestamp with time zone NOT NULL DEFAULT now()
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE UNIQUE,
+  theme character varying(20) NOT NULL DEFAULT 'dark',
+  language character varying(10) NOT NULL DEFAULT 'en',
+  timezone character varying(50) DEFAULT 'UTC',
+  notifications_enabled boolean NOT NULL DEFAULT true,
+  profile_visibility character varying(20) NOT NULL DEFAULT 'public' CHECK (profile_visibility IN ('public', 'private', 'connections')),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now()
 );
 
 -- =======================================================
@@ -488,9 +510,7 @@ CREATE TABLE IF NOT EXISTS public.whiteboards (
 CREATE OR REPLACE FUNCTION public.increment_reputation(user_id_input uuid, points_input integer)
 RETURNS void AS $$
 BEGIN
-  UPDATE public.profiles
-  SET reputation_points = reputation_points + points_input
-  WHERE id = user_id_input;
+  UPDATE public.profiles SET reputation_points = reputation_points + points_input WHERE id = user_id_input;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -498,13 +518,8 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE FUNCTION public.increment_follow_counts(follower_id uuid, following_id uuid)
 RETURNS void AS $$
 BEGIN
-  UPDATE public.profiles
-  SET following_count = following_count + 1
-  WHERE id = follower_id;
-
-  UPDATE public.profiles
-  SET followers_count = followers_count + 1
-  WHERE id = following_id;
+  UPDATE public.profiles SET following_count = following_count + 1 WHERE id = follower_id;
+  UPDATE public.profiles SET followers_count = followers_count + 1 WHERE id = following_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -512,9 +527,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE FUNCTION public.increment_skill_usage(skill_id_input uuid)
 RETURNS void AS $$
 BEGIN
-  UPDATE public.skills
-  SET usage_count = usage_count + 1
-  WHERE id = skill_id_input;
+  UPDATE public.skills SET usage_count = usage_count + 1 WHERE id = skill_id_input;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -522,10 +535,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE FUNCTION public.increment_teaching_hours(user_id_input uuid, hours_input double precision)
 RETURNS void AS $$
 BEGIN
-  UPDATE public.profiles
-  SET teaching_hours = teaching_hours + hours_input,
-      total_sessions = total_sessions + 1
-  WHERE id = user_id_input;
+  UPDATE public.profiles SET teaching_hours = teaching_hours + hours_input, total_sessions = total_sessions + 1 WHERE id = user_id_input;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -533,10 +543,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE FUNCTION public.increment_learning_hours(user_id_input uuid, hours_input double precision)
 RETURNS void AS $$
 BEGIN
-  UPDATE public.profiles
-  SET learning_hours = learning_hours + hours_input,
-      total_sessions = total_sessions + 1
-  WHERE id = user_id_input;
+  UPDATE public.profiles SET learning_hours = learning_hours + hours_input, total_sessions = total_sessions + 1 WHERE id = user_id_input;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -544,218 +551,54 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE FUNCTION public.increment_activity(user_id_input uuid, points_input integer)
 RETURNS void AS $$
 BEGIN
-  UPDATE public.profiles
-  SET activity_score = activity_score + points_input
-  WHERE id = user_id_input;
+  UPDATE public.profiles SET activity_score = activity_score + points_input WHERE id = user_id_input;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- 6. Match Session Notes (Vector Search for RAG)
 CREATE OR REPLACE FUNCTION public.match_session_notes(
-  query_embedding vector,
-  user_id_filter uuid,
-  match_count integer,
-  match_threshold double precision
+  query_embedding vector, user_id_filter uuid, match_count integer, match_threshold double precision
 )
-RETURNS TABLE (
-  id uuid,
-  session_id uuid,
-  content text,
-  similarity double precision
-) AS $$
+RETURNS TABLE (id uuid, session_id uuid, content text, similarity double precision) AS $$
 BEGIN
-  RETURN QUERY
-  SELECT
-    sn.id,
-    sn.session_id,
-    sn.content,
-    1 - (sn.embedding <=> query_embedding) AS similarity
+  RETURN QUERY SELECT sn.id, sn.session_id, sn.content, 1 - (sn.embedding <=> query_embedding) AS similarity
   FROM public.session_note_vectors sn
-  WHERE sn.user_id = user_id_filter
-    AND 1 - (sn.embedding <=> query_embedding) > match_threshold
-  ORDER BY sn.embedding <=> query_embedding
-  LIMIT match_count;
+  WHERE sn.user_id = user_id_filter AND 1 - (sn.embedding <=> query_embedding) > match_threshold
+  ORDER BY sn.embedding <=> query_embedding LIMIT match_count;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- 7. Match Embeddings (Cosine similarity vector search for match recommendations)
 CREATE OR REPLACE FUNCTION public.match_embeddings(
-  query_embedding vector,
-  match_count integer,
-  user_id_filter uuid
+  query_embedding vector, match_count integer, user_id_filter uuid
 )
-RETURNS TABLE (
-  id uuid,
-  full_name varchar,
-  avatar_url text,
-  avg_rating double precision,
-  reputation_points integer,
-  similarity double precision
-) AS $$
+RETURNS TABLE (id uuid, full_name varchar, avatar_url text, avg_rating double precision, reputation_points integer, similarity double precision) AS $$
 BEGIN
-  RETURN QUERY
-  SELECT
-    p.id,
-    p.full_name,
-    p.avatar_url,
-    p.avg_rating,
-    p.reputation_points,
+  RETURN QUERY SELECT p.id, p.full_name, p.avatar_url, p.avg_rating, p.reputation_points,
     1 - (p.embedding <=> query_embedding) AS similarity
-  FROM public.profiles p
-  WHERE p.id <> user_id_filter
-  ORDER BY p.embedding <=> query_embedding
-  LIMIT match_count;
+  FROM public.profiles p WHERE p.id <> user_id_filter
+  ORDER BY p.embedding <=> query_embedding LIMIT match_count;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 8. Get Nearby Profiles (Haversine/Distance search fallback or PostGIS)
+-- 8. Get Nearby Profiles (Haversine/Distance search)
 CREATE OR REPLACE FUNCTION public.get_nearby_profiles(
-  user_lat double precision,
-  user_lon double precision,
-  radius_km double precision
+  user_lat double precision, user_lon double precision, radius_km double precision
 )
-RETURNS TABLE (
-  id uuid,
-  full_name varchar,
-  avatar_url text,
-  city varchar,
-  country_code varchar,
-  avg_rating double precision,
-  distance double precision
-) AS $$
+RETURNS TABLE (id uuid, full_name varchar, avatar_url text, city varchar, country_code varchar, avg_rating double precision, distance double precision) AS $$
 BEGIN
-  RETURN QUERY
-  SELECT
-    p.id,
-    p.full_name,
-    p.avatar_url,
-    p.city,
-    p.country_code,
-    p.avg_rating,
-    (6371 * acos(
-      cos(radians(user_lat)) * cos(radians(p.latitude)) *
-      cos(radians(p.longitude) - radians(user_lon)) +
-      sin(radians(user_lat)) * sin(radians(p.latitude))
-    )) AS distance
-  FROM public.profiles p
-  WHERE p.latitude IS NOT NULL AND p.longitude IS NOT NULL
-    AND (6371 * acos(
-      cos(radians(user_lat)) * cos(radians(p.latitude)) *
-      cos(radians(p.longitude) - radians(user_lon)) +
-      sin(radians(user_lat)) * sin(radians(p.latitude))
-    )) <= radius_km
+  RETURN QUERY SELECT p.id, p.full_name, p.avatar_url, p.city, p.country_code, p.avg_rating,
+    (6371 * acos(cos(radians(user_lat)) * cos(radians(p.latitude)) * cos(radians(p.longitude) - radians(user_lon)) + sin(radians(user_lat)) * sin(radians(p.latitude)))) AS distance
+  FROM public.profiles p WHERE p.latitude IS NOT NULL AND p.longitude IS NOT NULL
+    AND (6371 * acos(cos(radians(user_lat)) * cos(radians(p.latitude)) * cos(radians(p.longitude) - radians(user_lon)) + sin(radians(user_lat)) * sin(radians(p.latitude)))) <= radius_km
   ORDER BY distance ASC;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
-
--- =======================================================
--- ✅ Row Level Security (RLS) Policies
--- =======================================================
-ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.user_skills_offered ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.user_skills_wanted ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.education ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.experience ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.availability ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.user_follows ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.matches ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.learning_sessions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.reviews ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.message_reactions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.notification_preferences ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.user_settings ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.whiteboards ENABLE ROW LEVEL SECURITY;
-
--- 1. Users policies
-CREATE POLICY "Users can view their own record" ON public.users FOR SELECT USING (auth.uid() = id);
-CREATE POLICY "Users can update their own record" ON public.users FOR UPDATE USING (auth.uid() = id);
-
--- 2. Profiles policies
-CREATE POLICY "Profiles are viewable by everyone" ON public.profiles FOR SELECT USING (true);
-CREATE POLICY "Users can update their own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
-
--- 3. Skills policies (categories/definitions are open, user selections are own)
-CREATE POLICY "Offered skills are viewable by everyone" ON public.user_skills_offered FOR SELECT USING (true);
-CREATE POLICY "Users can manage offered skills" ON public.user_skills_offered FOR ALL USING (auth.uid() = user_id);
-
-CREATE POLICY "Wanted skills are viewable by everyone" ON public.user_skills_wanted FOR SELECT USING (true);
-CREATE POLICY "Users can manage wanted skills" ON public.user_skills_wanted FOR ALL USING (auth.uid() = user_id);
-
--- 4. Education & Experience policies
-CREATE POLICY "Education viewable by everyone" ON public.education FOR SELECT USING (true);
-CREATE POLICY "Users can manage education" ON public.education FOR ALL USING (auth.uid() = user_id);
-
-CREATE POLICY "Experience viewable by everyone" ON public.experience FOR SELECT USING (true);
-CREATE POLICY "Users can manage experience" ON public.experience FOR ALL USING (auth.uid() = user_id);
-
--- 5. Availability policies
-CREATE POLICY "Availability viewable by everyone" ON public.availability FOR SELECT USING (true);
-CREATE POLICY "Users can manage availability" ON public.availability FOR ALL USING (auth.uid() = user_id);
-
--- 6. Follow system policies
-CREATE POLICY "Follows are viewable by everyone" ON public.user_follows FOR SELECT USING (true);
-CREATE POLICY "Users can manage follows" ON public.user_follows FOR ALL USING (auth.uid() = follower_id);
-
--- 7. Matches policies
-CREATE POLICY "Users can view matches they are part of" ON public.matches FOR SELECT USING (auth.uid() = user_a_id OR auth.uid() = user_b_id);
-CREATE POLICY "Users can update matches they are part of" ON public.matches FOR UPDATE USING (auth.uid() = user_a_id OR auth.uid() = user_b_id);
-
--- 8. Sessions policies
-CREATE POLICY "Users can view sessions they are part of" ON public.learning_sessions FOR SELECT USING (auth.uid() = host_id OR auth.uid() = participant_id);
-CREATE POLICY "Users can update sessions they are part of" ON public.learning_sessions FOR UPDATE USING (auth.uid() = host_id OR auth.uid() = participant_id);
-
--- 9. Reviews policies
-CREATE POLICY "Reviews viewable by everyone" ON public.reviews FOR SELECT USING (true);
-CREATE POLICY "Users can insert reviews for their sessions" ON public.reviews FOR INSERT WITH CHECK (auth.uid() = reviewer_id);
-CREATE POLICY "Users can update reviews they wrote" ON public.reviews FOR UPDATE USING (auth.uid() = reviewer_id);
-
--- 10. Conversations policies
-CREATE POLICY "Users can view conversations they are part of" ON public.conversations FOR SELECT USING (auth.uid() = user_a_id OR auth.uid() = user_b_id);
-CREATE POLICY "Users can update conversations they are part of" ON public.conversations FOR UPDATE USING (auth.uid() = user_a_id OR auth.uid() = user_b_id);
-
--- 11. Messages policies
-CREATE POLICY "Users can view messages in their conversations" ON public.messages FOR SELECT USING (
-  EXISTS (
-    SELECT 1 FROM public.conversations c 
-    WHERE c.id = conversation_id AND (c.user_a_id = auth.uid() OR c.user_b_id = auth.uid())
-  )
-);
-CREATE POLICY "Users can insert messages in their conversations" ON public.messages FOR INSERT WITH CHECK (
-  auth.uid() = sender_id AND EXISTS (
-    SELECT 1 FROM public.conversations c 
-    WHERE c.id = conversation_id AND (c.user_a_id = auth.uid() OR c.user_b_id = auth.uid())
-  )
-);
-
--- 12. Whiteboard policies
-CREATE POLICY "Users can view whiteboards for their sessions" ON public.whiteboards FOR SELECT USING (
-  EXISTS (
-    SELECT 1 FROM public.learning_sessions s 
-    WHERE s.id = session_id AND (s.host_id = auth.uid() OR s.participant_id = auth.uid())
-  )
-);
-CREATE POLICY "Users can manage whiteboards for their sessions" ON public.whiteboards FOR ALL USING (
-  EXISTS (
-    SELECT 1 FROM public.learning_sessions s 
-    WHERE s.id = session_id AND (s.host_id = auth.uid() OR s.participant_id = auth.uid())
-  )
-);
-
--- 13. Activities policies
-CREATE POLICY "Users can view activities they are involved in" ON public.activities FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Activities are creatable by server/service" ON public.activities FOR INSERT WITH CHECK (true);
-
 
 -- =======================================================
 -- ✅ Seed Data
 -- =======================================================
 
--- Seed Skill Categories
 INSERT INTO public.skill_categories (id, name, slug, icon, color, description) VALUES
   ('c1000000-0000-0000-0000-000000000001', 'Technology & Software', 'software-tech', 'code', '#3b82f6', 'Software engineering, web development, cloud computing, and IT infrastructures.'),
   ('c1000000-0000-0000-0000-000000000002', 'Design & Creative', 'design-creative', 'palette', '#ec4899', 'UI/UX design, graphic design, animation, 3D modeling, photography, and video editing.'),
@@ -764,7 +607,6 @@ INSERT INTO public.skill_categories (id, name, slug, icon, color, description) V
   ('c1000000-0000-0000-0000-000000000005', 'Music & Performing Arts', 'music-arts', 'music', '#8b5cf6', 'Instruments playing, vocal coaching, music production, dance, and theater.')
 ON CONFLICT (slug) DO NOTHING;
 
--- Seed Skills
 INSERT INTO public.skills (name, slug, category_id, description, is_verified, is_active) VALUES
   ('JavaScript Programming', 'javascript', 'c1000000-0000-0000-0000-000000000001', 'Core JS foundations, DOM, event loops, async patterns, and modern ES6+ practices.', true, true),
   ('React Frontend Development', 'react-dev', 'c1000000-0000-0000-0000-000000000001', 'React components, state hooks, routing, global state, performance optimization, and styling.', true, true),
@@ -774,7 +616,6 @@ INSERT INTO public.skills (name, slug, category_id, description, is_verified, is
   ('Search Engine Optimization (SEO)', 'seo', 'c1000000-0000-0000-0000-000000000004', 'On-page/off-page SEO, keyword research, core web vitals, indexation issues, and content optimization.', true, true)
 ON CONFLICT (slug) DO NOTHING;
 
--- Seed Badge Definitions
 INSERT INTO public.badge_definitions (name, slug, description, tier, criteria) VALUES
   ('First Step', 'first-session', 'Completed your first learning or teaching session', 'bronze', '{"type":"session_count","threshold":1}'),
   ('Century Swapper', 'century-club', 'Completed 100 learning sessions', 'gold', '{"type":"session_count","threshold":100}'),

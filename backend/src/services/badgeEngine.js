@@ -70,6 +70,45 @@ const BADGE_EVALUATORS = {
       .or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`)
       .eq('status', 'accepted')
     return (count || 0) >= threshold
+  },
+
+  // First chat badge: at least one message sent by the user
+  first_chat: async (userId) => {
+    const { count } = await supabaseAdmin
+      .from('messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('sender_id', userId)
+    return (count || 0) >= 1
+  },
+
+  // First call badge: at least one completed session where user was host or participant
+  first_call: async (userId) => {
+    const { count } = await supabaseAdmin
+      .from('learning_sessions')
+      .select('id', { count: 'exact', head: true })
+      .or(`host_id.eq.${userId},participant_id.eq.${userId}`)
+      .eq('status', 'completed')
+    return (count || 0) >= 1
+  },
+
+  // Leaderboard rank check
+  leaderboard_rank: async (userId, { period = 'allTime', rank = 1 }) => {
+    try {
+      const { getUserRank } = require('./leaderboardService.js')
+      const result = await getUserRank(userId, period)
+      return result.rank !== null && result.rank <= rank
+    } catch {
+      return false
+    }
+  },
+
+  // Conversation count badge
+  conversation_count: async (userId, threshold) => {
+    const { count } = await supabaseAdmin
+      .from('conversations')
+      .select('id', { count: 'exact', head: true })
+      .or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`)
+    return (count || 0) >= threshold
   }
 }
 
@@ -120,6 +159,9 @@ async function awardBadge(userId, badgeId, badgeName) {
 
     // Update profile reputation
     await supabaseAdmin.rpc('increment_reputation', { user_id_input: userId, points_input: 50 })
+
+    // Update profile activity score too
+    await supabaseAdmin.rpc('increment_activity', { user_id_input: userId, points_input: 25 }).catch(() => {})
 
     logger.info(`[BadgeEngine] Awarded badge "${badgeName}" to user ${userId}`)
     return awarded

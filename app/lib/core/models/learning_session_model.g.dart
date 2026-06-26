@@ -11,9 +11,9 @@ _$LearningSessionModelImpl _$$LearningSessionModelImplFromJson(
     _$LearningSessionModelImpl(
       id: json['id'] as String,
       matchId: json['match_id'] as String?,
-      hostId: json['host_id'] as String,
-      participantId: json['participant_id'] as String,
-      title: json['title'] as String,
+      hostId: json['host_id'] as String?,
+      participantId: json['participant_id'] as String?,
+      title: json['title'] as String? ?? 'Session',
       description: json['description'] as String?,
       scheduledAt: DateTime.parse(json['scheduled_at'] as String),
       durationMinutes: (json['duration_minutes'] as num?)?.toInt() ?? 60,

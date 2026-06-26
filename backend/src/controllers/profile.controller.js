@@ -280,11 +280,70 @@ const getFollowing = async (req, res, next) => {
   } catch (err) { next(err) }
 }
 
+const getOnlineUsers = async (req, res, next) => {
+  try {
+    const socketServer = require('../websocket/socketServer.js')
+    const onlineIds = Array.from(socketServer.activeUsers.keys()).filter(id => id !== req.user.id)
+
+    if (onlineIds.length === 0) {
+      const { data: allProfiles, error: err } = await supabaseAdmin
+        .from('profiles')
+        .select('*, users:id(id, email, username)')
+        .neq('id', req.user.id)
+        .limit(20)
+
+      if (err) throw err
+      const processed = (allProfiles || []).map(p => ({ ...p, is_online: true }))
+      return res.status(200).json({ data: processed })
+    }
+
+    const { data: profiles, error } = await supabaseAdmin
+      .from('profiles')
+      .select('*, users:id(id, email, username)')
+      .in('id', onlineIds)
+
+    if (error) throw error
+
+    const processed = (profiles || []).map(p => ({ ...p, is_online: true }))
+    return res.status(200).json({ data: processed })
+  } catch (err) {
+    next(err)
+  }
+}
+
+const searchUsers = async (req, res, next) => {
+  try {
+    const q = (req.query.q || '').trim()
+    if (!q) return res.status(200).json({ data: [] })
+
+    const { data: profiles, error } = await supabaseAdmin
+      .from('profiles')
+      .select('id, full_name, avatar_url, users:id(username)')
+      .ilike('full_name', `%${q}%`)
+      .neq('id', req.user.id)
+      .limit(20)
+
+    if (error) throw error
+
+    const processed = (profiles || []).map(p => ({
+      id: p.id,
+      full_name: p.full_name,
+      username: p.users?.username || null,
+      avatar_url: p.avatar_url,
+    }))
+
+    return res.status(200).json({ data: processed })
+  } catch (err) {
+    next(err)
+  }
+}
+
 module.exports = {
   getMyProfile, getPublicProfile, updateProfile,
   uploadAvatar: uploadAvatarHandler, deleteAvatar,
   getEducation, addEducation, updateEducation, deleteEducation,
   getExperience, addExperience, updateExperience, deleteExperience,
   getAvailability, setAvailability, deleteAvailability,
-  followUser, unfollowUser, getFollowers, getFollowing
+  followUser, unfollowUser, getFollowers, getFollowing,
+  getOnlineUsers, searchUsers
 }

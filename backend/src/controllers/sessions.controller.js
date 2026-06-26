@@ -5,6 +5,26 @@ const { notify } = require('../services/notificationService.js')
 const emailService = require('../services/emailService.js')
 const logger = require('../utils/logger.js')
 
+async function addActivity({ userId, actorId, type, title, body = null, points = 1, referenceId = null }) {
+  try {
+    const record = await db.insert('activities', {
+      user_id: userId,
+      actor_id: actorId ?? userId,
+      type,
+      title,
+      body,
+      points,
+      reference_id: referenceId
+    })
+
+    await supabaseAdmin.rpc('increment_activity', { user_id_input: userId, points_input: points }).catch(() => {})
+    return record
+  } catch (err) {
+    logger.warn(`[Activity] Failed to record ${type} for ${userId}: ${err.message}`)
+    return null
+  }
+}
+
 // ✅ GET /api/sessions
 const getMySessions = async (req, res, next) => {
   try {
@@ -15,8 +35,8 @@ const getMySessions = async (req, res, next) => {
       .from('learning_sessions')
       .select(`
         *,
-        host:host_id (id, username, profiles:id (full_name, avatar_url)),
-        participant:participant_id (id, username, profiles:id (full_name, avatar_url))
+        host:host_id (id, username),
+        participant:participant_id (id, username)
       `)
       .or(`host_id.eq.${userId},participant_id.eq.${userId}`)
       .order('scheduled_at', { ascending: false })
@@ -38,8 +58,8 @@ const getSessionById = async (req, res, next) => {
       .from('learning_sessions')
       .select(`
         *,
-        host:host_id (id, username, profiles:id (full_name, avatar_url)),
-        participant:participant_id (id, username, profiles:id (full_name, avatar_url))
+        host:host_id (id, username),
+        participant:participant_id (id, username)
       `)
       .eq('id', req.params.id)
       .single()
@@ -72,13 +92,24 @@ const scheduleSession = async (req, res, next) => {
       description: description || '',
       scheduled_at: scheduledAt,
       duration_minutes: durationMinutes,
-      status: 'pending',
+      status: req.body.status || 'pending',
       agora_channel: `session-${Date.now()}`
     })
 
     // Notify the participant
     const io = req.app.get('io')
-    await notify.sessionScheduled(io, participantId, userId, { sessionId: session.id, title })
+    await notify.sessionScheduled(io, participantId, userId, {
+      sessionId: session.id,
+      title,
+      status: session.status
+    })
+
+    setImmediate(async () => {
+      try {
+        await evaluateUserBadges(userId)
+        await evaluateUserBadges(participantId)
+      } catch (e) { logger.error(`[Sessions] Async badge check failed: ${e.message}`) }
+    })
 
     return res.status(201).json({ data: session, message: 'Session scheduled.' })
   } catch (err) { next(err) }
@@ -216,6 +247,12 @@ const completeSession = async (req, res, next) => {
     await db.insert('reputation_points', {
       user_id: session.participant_id, points: 10, action: 'learn_session', reference_type: 'session', reference_id: session.id
     })
+
+    // Award +30 activity points for the call
+    await Promise.all([
+      addActivity({ userId: session.host_id, actorId: session.host_id, type: 'call_completed', title: 'Call completed', points: 30, referenceId: session.id }),
+      addActivity({ userId: session.participant_id, actorId: session.participant_id, type: 'call_completed', title: 'Call completed', points: 30, referenceId: session.id })
+    ]).catch(() => {})
 
     // Trigger badge evaluation asynchronously
     const { evaluateUserBadges } = require('../services/badgeEngine.js')

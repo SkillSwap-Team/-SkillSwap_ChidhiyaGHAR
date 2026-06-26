@@ -94,10 +94,12 @@ class ApiConstants {
 
   // ── Badges ───────────────────────────────────────────────────────
   static const String badgesAll             = '/badges/all';
-  static const String badgesMine            = '/badges/mine';
+  static const String badgesMine            = '/badges/my';
 
   // ── Leaderboard ──────────────────────────────────────────────────
   static const String leaderboard           = '/leaderboard';
+  static const String leaderboardActivity   = '/leaderboard/activity';
+  static String leaderboardRank(String userId) => '/leaderboard/rank/$userId';
 
   // ── Feed ─────────────────────────────────────────────────────────
   static const String feed                  = '/feed';

@@ -3,7 +3,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/dio_client.dart';
 import '../api/api_exception.dart';
 import '../models/profile_model.dart';
+import '../models/learning_session_model.dart';
 import '../../config/api_constants.dart';
+
+final activityLeaderboardProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final api = ref.watch(apiProvider);
+  try {
+    final response = await api.get<Map<String, dynamic>>(ApiConstants.leaderboardActivity, queryParameters: {'limit': 50});
+    final data = response['data'] as List? ?? [];
+    return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  } catch (e) {
+    return [];
+  }
+});
 
 // ═══════════════════════════════════════════════════════════════════
 //  My Profile provider
@@ -111,3 +123,94 @@ final userProfileProvider = FutureProvider.family<ProfileModel?, String>(
     }
   },
 );
+
+// ═══════════════════════════════════════════════════════════════════
+//  Online users provider
+// ═══════════════════════════════════════════════════════════════════
+
+final onlineUsersProvider = FutureProvider<List<ProfileModel>>((ref) async {
+  final api = ref.watch(apiProvider);
+  try {
+    final response = await api.get<Map<String, dynamic>>('/profile/online-users');
+    final data = response['data'] as List?;
+    if (data == null) return [];
+    return data.map((item) => ProfileModel.fromJson(Map<String, dynamic>.from(item as Map))).toList();
+  } catch (e) {
+    return [];
+  }
+});
+
+final myBadgesProvider = FutureProvider<List<dynamic>>((ref) async {
+  final api = ref.watch(apiProvider);
+  try {
+    final response = await api.get<Map<String, dynamic>>('/badges/my');
+    return response['data'] as List? ?? [];
+  } catch (e) {
+    return [];
+  }
+});
+
+final upcomingSessionsProvider = FutureProvider<List<LearningSessionModel>>((ref) async {
+  final api = ref.watch(apiProvider);
+  try {
+    final response = await api.get<Map<String, dynamic>>('/sessions');
+    final data = response['data'] as List?;
+    if (data == null) return [];
+
+    final sessions = <LearningSessionModel>[];
+    for (final item in data) {
+      try {
+        final s = LearningSessionModel.fromJson(Map<String, dynamic>.from(item as Map));
+        sessions.add(s);
+      } catch (parseErr) {
+        // ignore malformed individual records
+      }
+    }
+    final now = DateTime.now();
+    return sessions.where((s) =>
+      (s.status == 'confirmed' || s.status == 'pending') &&
+      s.scheduledAt.add(Duration(minutes: s.durationMinutes)).isAfter(now)
+    ).toList();
+  } catch (e) {
+    return [];
+  }
+});
+
+final mySessionsProvider = FutureProvider<List<LearningSessionModel>>((ref) async {
+  final api = ref.watch(apiProvider);
+  try {
+    final response = await api.get<Map<String, dynamic>>('/sessions');
+    final rawData = response['data'];
+    if (rawData == null) return [];
+
+    final data = rawData as List;
+    final sessions = <LearningSessionModel>[];
+    for (final item in data) {
+      try {
+        final map = Map<String, dynamic>.from(item as Map);
+        sessions.add(LearningSessionModel.fromJson(map));
+      } catch (parseErr, st) {
+        // Log parse failure but continue loading remaining sessions
+        // ignore: avoid_print
+        print('[mySessionsProvider] Failed to parse session: $parseErr');
+        print('[mySessionsProvider] Stack: $st');
+      }
+    }
+    return sessions;
+  } catch (e, st) {
+    // ignore: avoid_print
+    print('[mySessionsProvider] Error fetching sessions: $e');
+    print('[mySessionsProvider] Stack: $st');
+    return [];
+  }
+});
+
+final badgeDefinitionsProvider = FutureProvider<List<dynamic>>((ref) async {
+  final api = ref.watch(apiProvider);
+  try {
+    final response = await api.get<Map<String, dynamic>>('/badges/definitions');
+    return response['data'] as List? ?? [];
+  } catch (e) {
+    return [];
+  }
+});

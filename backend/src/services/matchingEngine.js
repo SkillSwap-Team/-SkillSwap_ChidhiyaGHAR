@@ -117,16 +117,9 @@ async function computeMatchScore(userAId, userBId) {
   }
 }
 
-// ✅ Find top matches for a user using embedding similarity + composite score
+// ✅ Find top matches for a user using composite score (interest overlap & stars/reputation)
 async function findTopMatches(userId, { limit = 20 } = {}) {
   try {
-    // Get user profile embedding
-    const { data: profile } = await supabaseAdmin
-      .from('profiles')
-      .select('embedding, semantic_summary')
-      .eq('id', userId)
-      .single()
-
     // Get all users except self, with profiles and skills
     const { data: candidates } = await supabaseAdmin
       .from('profiles')
@@ -136,7 +129,6 @@ async function findTopMatches(userId, { limit = 20 } = {}) {
         user_skills_wanted(skills(name))
       `)
       .neq('id', userId)
-      .eq('is_profile_complete', true)
       .limit(200)
 
     if (!candidates || candidates.length === 0) return []

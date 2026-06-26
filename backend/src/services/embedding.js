@@ -31,29 +31,34 @@ async function withRetry(fn, retries = MAX_RETRIES) {
  */
 async function generateEmbedding(text) {
   if (!text || typeof text !== 'string') {
-    throw new Error('[Embedding] Input must be a non-empty string')
+    return new Array(EMBEDDING_DIMENSIONS).fill(0.0)
   }
 
   const truncated = text.substring(0, 8000).trim()
 
   return withRetry(async () => {
-    const model = genAI.getGenerativeModel({ model: EMBEDDING_MODEL })
-    const result = await model.embedContent(truncated)
-    const values = result.embedding?.values
+    try {
+      const model = genAI.getGenerativeModel({ model: EMBEDDING_MODEL })
+      const result = await model.embedContent(truncated)
+      const values = result.embedding?.values
 
-    if (!values || !Array.isArray(values)) {
-      throw new Error('[Embedding] Failed to retrieve embedding values from Gemini')
+      if (!values || !Array.isArray(values)) {
+        throw new Error('[Embedding] Failed to retrieve embedding values from Gemini')
+      }
+
+      // Pad with zeros to scale to 1536 dimensions mathematically preserving cosine similarity rankings
+      if (values.length < EMBEDDING_DIMENSIONS) {
+        const padding = new Array(EMBEDDING_DIMENSIONS - values.length).fill(0)
+        return [...values, ...padding]
+      } else if (values.length > EMBEDDING_DIMENSIONS) {
+        return values.slice(0, EMBEDDING_DIMENSIONS)
+      }
+
+      return values
+    } catch (err) {
+      logger.warn(`[Embedding] Gemini API error, returning fallback zero vector: ${err.message}`)
+      return new Array(EMBEDDING_DIMENSIONS).fill(0.0)
     }
-
-    // Pad with zeros to scale to 1536 dimensions mathematically preserving cosine similarity rankings
-    if (values.length < EMBEDDING_DIMENSIONS) {
-      const padding = new Array(EMBEDDING_DIMENSIONS - values.length).fill(0)
-      return [...values, ...padding]
-    } else if (values.length > EMBEDDING_DIMENSIONS) {
-      return values.slice(0, EMBEDDING_DIMENSIONS)
-    }
-
-    return values
   })
 }
 

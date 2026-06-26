@@ -20,6 +20,8 @@ router.use(normalLimiter)
 
 // Profile
 router.get('/', profileController.getMyProfile)
+router.get('/search-users', profileController.searchUsers)
+router.get('/online-users', profileController.getOnlineUsers)
 router.get('/:userId', profileController.getPublicProfile)
 router.put('/', updateProfileValidator, profileController.updateProfile)
 router.post('/avatar', upload.single('avatar'), profileController.uploadAvatar)

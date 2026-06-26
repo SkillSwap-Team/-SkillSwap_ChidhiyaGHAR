@@ -14,8 +14,7 @@ async function sendNotification({ userId, actorId = null, type, title, body = ''
         title,
         body,
         data,
-        is_read: false,
-        is_pushed: false
+        is_read: false
       })
       .select()
       .single()

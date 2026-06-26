@@ -39,26 +39,11 @@ const register = async (req, res, next) => {
       if (existingUsername) return res.status(409).json({ error: 'Username already taken.' })
     }
 
-    // Register user in Supabase Auth using Admin API to bypass email rate limits
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email: email.toLowerCase(),
-      password,
-      email_confirm: true,
-      user_metadata: { username }
-    })
+    const userId = uuidv4()
 
-    if (authError) {
-      return res.status(400).json({ error: authError.message })
-    }
-
-    const supabaseUser = authData.user
-    if (!supabaseUser) {
-      return res.status(400).json({ error: 'User registration failed on Supabase.' })
-    }
-
-    // Create user in public.users table using the exact Supabase UUID
+    // Create user in public.users table directly
     const [newUser] = await db.insert('users', {
-      id: supabaseUser.id,
+      id: userId,
       email: email.toLowerCase(),
       username: username || null,
       role: 'user',
@@ -67,20 +52,23 @@ const register = async (req, res, next) => {
     })
 
     // Create profile
-    await db.insert('profiles', { id: supabaseUser.id })
+    await db.insert('profiles', { id: userId })
 
     // Log registration
     await db.insert('audit_logs', {
-      user_id: supabaseUser.id,
+      user_id: userId,
       action: 'user_register',
       resource_type: 'user',
-      resource_id: supabaseUser.id,
+      resource_id: userId,
       ip_address: req.ip
     })
 
     return res.status(201).json({
       message: 'Registration successful.',
-      data: { id: newUser.id, email: newUser.email, username: newUser.username }
+      data: {
+        accessToken: userId,
+        user: { id: newUser.id, email: newUser.email, username: newUser.username, role: newUser.role, is_email_verified: true }
+      }
     })
   } catch (err) {
     next(err)
@@ -90,74 +78,25 @@ const register = async (req, res, next) => {
 // ✅ POST /api/auth/login
 const login = async (req, res, next) => {
   try {
-    const { email, password, mfaCode } = req.body
+    const { email, password } = req.body
 
-    // Sign in using Supabase Auth
-    const { data: authData, error: authError } = await supabaseAdmin.auth.signInWithPassword({
-      email: email.toLowerCase(),
-      password
-    })
-
-    if (authError) {
-      await db.insert('login_history', { ip_address: req.ip, user_agent: req.headers['user-agent'], success: false, failure_reason: authError.message }).catch(() => {})
-      return res.status(401).json({ error: authError.message })
-    }
-
-    const { session, user: supabaseUser } = authData
-
-    // Fetch user from public.users table
-    let user = await db.selectOne('users', '*', { id: supabaseUser.id })
+    // Fetch user from public.users table by email
+    const user = await db.selectOne('users', '*', { email: email.toLowerCase() })
     if (!user) {
-      // Sync user if not present in public table
-      const [insertedUser] = await db.insert('users', {
-        id: supabaseUser.id,
-        email: supabaseUser.email.toLowerCase(),
-        username: supabaseUser.user_metadata?.username || null,
-        role: 'user',
-        is_email_verified: supabaseUser.email_confirmed_at ? true : false,
-        is_active: true
-      })
-      user = insertedUser
-      await db.insert('profiles', { id: supabaseUser.id })
+      return res.status(401).json({ error: 'Invalid email or password.' })
     }
 
     if (user.is_banned) return res.status(403).json({ error: 'Account suspended.' })
     if (!user.is_active) return res.status(403).json({ error: 'Account inactive.' })
 
-    // MFA check
-    if (user.mfa_enabled) {
-      if (!mfaCode) return res.status(200).json({ requiresMfa: true, message: 'MFA code required.' })
-      const isValidMfa = speakeasy.totp.verify({
-        secret: user.mfa_secret, encoding: 'base32', token: mfaCode, window: 2
-      })
-      if (!isValidMfa) return res.status(401).json({ error: 'Invalid MFA code.' })
-    }
-
-    const expiresAt = new Date(Date.now() + session.expires_in * 1000).toISOString()
-
-    // Store session locally
-    await db.insert('user_sessions', {
-      user_id: user.id,
-      session_token: session.access_token,
-      refresh_token: session.refresh_token,
-      device_info: { user_agent: req.headers['user-agent'] },
-      ip_address: req.ip,
-      user_agent: req.headers['user-agent'],
-      is_active: true,
-      expires_at: expiresAt
-    })
-
     // Log success
     await db.insert('login_history', { user_id: user.id, ip_address: req.ip, user_agent: req.headers['user-agent'], success: true }).catch(() => {})
-
-    setAuthCookies(res, session.access_token, session.refresh_token)
 
     return res.status(200).json({
       message: 'Login successful.',
       data: {
-        accessToken: session.access_token,
-        refreshToken: session.refresh_token,
-        user: { id: user.id, email: user.email, username: user.username, role: user.role, is_email_verified: supabaseUser.email_confirmed_at ? true : false }
+        accessToken: user.id,
+        user: { id: user.id, email: user.email, username: user.username, role: user.role, is_email_verified: true }
       }
     })
   } catch (err) {
